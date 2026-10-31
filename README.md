@@ -207,10 +207,10 @@ _system
 | 平台 | 源码/后端 | 桌面窗口 | 托盘 | 安装包 |
 |---|---|---|---|---|
 | Windows 10/11 | ✅ | ✅ WebView2 | ✅ | ✅ 便携 exe / 安装脚本 |
-| Linux | ✅ 可用 `python run.py` | ⚠️ 需浏览器打开，未提供原生打包 | ❌ | ❌ |
+| Linux | ⚠️ 核心服务预计可用，未在 Linux 实测 | ⚠️ 需浏览器打开，未提供原生打包 | ❌ | ❌ |
 | macOS | 未验证 | 未验证 | ❌ | ❌ |
 
-Linux 当前属于“源码运行支持”：
+Linux 当前属于“源码运行、尚未实测”的范围。核心 FastAPI 服务不依赖 Windows API，但依赖 Linux 上的 Python、WebKit/浏览器和 SQLite FTS5 环境：
 
 ```bash
 python3 -m venv .venv
