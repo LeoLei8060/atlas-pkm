@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Atlas · AI-PKM Agent</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23b45309'/%3E%3Ctext x='16' y='22' font-size='18' text-anchor='middle' fill='white' font-family='Arial'%3EA%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/styles.css?v=20261029-feed-replace">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">A</div>
+      <div>
+        <div class="brand-name">ATLAS</div>
+        <div class="brand-sub">AI-PKM Agent</div>
+      </div>
+    </div>
+    <nav class="nav">
+      <button class="nav-item active" data-view="dashboard"><span>◈</span>概览</button>
+      <button class="nav-item" data-view="feed"><span>◉</span>资讯</button>
+      <button class="nav-item" data-view="collections"><span>▣</span>收藏</button>
+      <button class="nav-item" data-view="wiki"><span>▤</span>LLM Wiki</button>
+      <button class="nav-item" data-view="learning"><span>✦</span>学习</button>
+      <button class="nav-item" data-view="graph"><span>⌘</span>图谱</button>
+      <button class="nav-item" data-view="ask"><span>◌</span>问答</button>
+      <button class="nav-item" data-view="patches"><span>⚑</span>补丁<span id="patchBadge" class="badge hidden">0</span></button>
+      <button class="nav-item" data-view="settings"><span>⚙</span>设置</button>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="dot-row"><span id="sideDot" class="dot"></span><span id="sideStatus">正在检查模型…</span></div>
+      <div class="side-note">本地 Markdown 是事实层<br>外部模型只负责推理</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div>
+        <h1 id="viewTitle">概览</h1>
+        <p id="viewSub">本地知识库与 Agent 的运行状态</p>
+      </div>
+      <div class="top-actions">
+        <span id="providerChip" class="chip">未配置模型</span>
+        <button id="themeToggle" class="icon-btn" title="切换主题">◐</button>
+      </div>
+    </header>
+    <div id="setupBanner" class="setup-banner hidden"></div>
+
+    <section id="view-dashboard" class="view active">
+      <div id="dashboardContent"></div>
+    </section>
+
+    <section id="view-feed" class="view">
+      <div class="feed-tabs">
+        <button class="feed-tab active" data-feed-tab="rss">RSS</button>
+        <button class="feed-tab" data-feed-tab="github">GitHub</button>
+      </div>
+
+      <div id="rssPanel">
+        <div class="feed-layout">
+          <aside class="feed-source-sidebar">
+            <div class="feed-source-sidebar-title">来源</div>
+            <div id="feedSourceList" class="feed-source-list"></div>
+          </aside>
+          <div class="feed-main">
+            <div class="toolbar">
+              <div class="toolbar-group">
+                <div class="sort-tabs">
+                  <button class="sort-tab active" data-feed-sort="relevance">匹配度</button>
+                  <button class="sort-tab" data-feed-sort="recent">最新</button>
+                </div>
+                <button id="refreshAllFeeds" class="btn" title="按设置的时间范围抓取所有来源，并更新本地数据">抓取最新资讯</button>
+                <span id="enrichHint" class="hint"></span>
+              </div>
+            </div>
+            <div class="feed-filter-bar">
+              <select id="feedStatus" class="input">
+                <option value="">全部（不含忽略）</option>
+                <option value="unread">未读</option>
+                <option value="read">已读</option>
+                <option value="saved">已收藏</option>
+                <option value="dismissed">已忽略</option>
+              </select>
+              <span id="feedFilterHint" class="hint"></span>
+              <div class="bulk-actions">
+                <label class="check"><input id="selectAllFeed" type="checkbox"> 全选</label>
+                <button id="bulkRead" class="btn ghost">已读</button>
+                <button id="bulkUnread" class="btn ghost">未读</button>
+                <button id="bulkSave" class="btn ghost">收藏</button>
+                <button id="bulkDismiss" class="btn ghost">忽略</button>
+                <button id="bulkDelete" class="btn danger ghost">删除</button>
+              </div>
+            </div>
+            <div id="feedList" class="card-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="githubPanel" hidden>
+        <div class="github-panel-head">
+          <div class="stack-chips" id="githubStacks"></div>
+          <div class="rank-tabs" id="githubMetrics"></div>
+          <div class="github-ranking-bar">
+            <span id="githubNotice" class="hint"></span>
+            <button id="refreshGithubRanking" class="btn ghost">刷新榜单</button>
+          </div>
+        </div>
+        <div id="githubRanking" class="rank-list"></div>
+      </div>
+    </section>
+
+    <section id="view-collections" class="view">
+      <div class="section-head">
+        <div>
+          <h2>已保存内容</h2>
+          <p>你主动留下的内容。收藏只保存引用，不复制正文。</p>
+        </div>
+        <button id="refreshCollections" class="btn ghost">刷新</button>
+      </div>
+      <div class="collection-tabs">
+        <button class="collection-tab active" data-collection-tab="rss">RSS / 其他</button>
+        <button class="collection-tab" data-collection-tab="github">GitHub</button>
+      </div>
+      <div id="collectionsList" class="card-list"></div>
+    </section>
+
+    <section id="view-wiki" class="view">
+      <div class="section-head">
+        <div>
+          <h2>知识库页面</h2>
+          <p>从 Markdown Vault 生成的只读视图；Obsidian 修改后自动同步。 <span id="wikiSyncHint" class="hint"></span></p>
+        </div>
+        <div class="toolbar-group">
+          <button id="buildWiki" class="btn">重建 Wiki</button>
+          <a class="btn ghost" href="/wiki/" target="_blank" rel="noreferrer">新窗口打开</a>
+        </div>
+      </div>
+      <iframe id="wikiFrame" class="wiki-frame" src="/wiki/" title="LLM Wiki"></iframe>
+    </section>
+
+    <section id="view-ask" class="view">
+      <div class="ask-box">
+        <label for="question">问知识库</label>
+        <textarea id="question" rows="4" placeholder="例如：Rust async 的取消安全是什么？和 Tokio 的 select! 有什么关系？"></textarea>
+        <div class="ask-actions">
+          <label class="check"><input id="savePatch" type="checkbox"> 同时生成知识页补丁</label>
+          <button id="askBtn" class="btn primary">提问</button>
+        </div>
+      </div>
+      <div id="answerPanel" class="answer-panel hidden"></div>
+    </section>
+
+    <section id="view-learning" class="view">
+      <div class="learning-grid">
+        <div class="panel">
+          <h3>生成学习内容</h3>
+          <div class="rank-tabs" id="learningModes">
+            <button class="rank-tab active" data-learning-mode="knowledge_doc">知识文档</button>
+            <button class="rank-tab" data-learning-mode="interview">面试题</button>
+          </div>
+          <label class="field">
+            <span>主题</span>
+            <input id="learningTopic" class="input" placeholder="例如：Rust 异步取消安全">
+          </label>
+          <div class="form-row hidden" id="interviewOptions">
+            <label class="field narrow">
+              <span>难度</span>
+              <select id="learningDifficulty" class="input">
+                <option>初级</option>
+                <option selected>中级</option>
+                <option>高级</option>
+              </select>
+            </label>
+            <label class="field narrow">
+              <span>面试题数量</span>
+              <input id="learningCount" class="input" type="number" min="3" max="10" value="5">
+            </label>
+          </div>
+          <div class="settings-actions">
+            <button id="generateLearning" class="btn primary">生成</button>
+            <span id="learningHint" class="hint"></span>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>周期复盘</h3>
+          <p class="hint">基于最近资讯、收藏、匹配度与反馈生成复盘。</p>
+          <div class="form-row">
+            <label class="field narrow">
+              <span>时间范围</span>
+              <select id="reviewDays" class="input">
+                <option value="7" selected>最近 7 天</option>
+                <option value="30">最近 30 天</option>
+                <option value="90">最近 90 天</option>
+              </select>
+            </label>
+          </div>
+          <div class="settings-actions">
+            <button id="generateReview" class="btn">生成本期复盘</button>
+            <span id="reviewStats" class="hint"></span>
+          </div>
+        </div>
+      </div>
+      <div id="learningOutput" class="panel hidden"></div>
+    </section>
+
+    <section id="view-graph" class="view">
+      <div class="section-head">
+        <div>
+          <h2>知识图谱</h2>
+          <p>基于 wikilink 和共同标签自动关联笔记。</p>
+        </div>
+        <button id="refreshGraph" class="btn ghost">刷新图谱</button>
+      </div>
+      <div id="graphStats" class="hint"></div>
+      <div class="graph-actions">
+        <select id="graphNote" class="input"></select>
+        <button id="suggestLinks" class="btn">为选中笔记生成关联建议</button>
+        <button id="suggestAllLinks" class="btn ghost">全库生成</button>
+        <span id="linkHint" class="hint"></span>
+      </div>
+      <div class="graph-wrap">
+        <svg id="graphSvg" viewBox="0 0 900 560" role="img" aria-label="知识图谱"></svg>
+      </div>
+      <div id="graphLegend" class="hint"></div>
+    </section>
+
+    <section id="view-patches" class="view">
+      <div class="section-head">
+        <div>
+          <h2>待处理建议</h2>
+          <p>Agent 对知识库的修改建议。默认手动应用，应用后会重建索引与 Wiki。</p>
+        </div>
+        <button id="refreshPatches" class="btn ghost">刷新</button>
+      </div>
+      <div id="patchList" class="card-list"></div>
+    </section>
+
+    <section id="view-settings" class="view">
+      <div class="section-head">
+        <div>
+          <h2>模型与知识库</h2>
+          <p>没有 Key 也能启动，页面为空；配置任意一家后即可开始。</p>
+        </div>
+      </div>
+      <div class="settings-tabs" id="settingsTabs">
+        <button class="settings-tab" data-settings-tab="profile">个人画像</button>
+        <button class="settings-tab active" data-settings-tab="model">模型</button>
+        <button class="settings-tab" data-settings-tab="collect">采集</button>
+      </div>
+      <div id="settings-panel-model" class="settings-panel">
+      <div id="modelSummary" class="model-summary"></div>
+      <div class="settings-subhead model-list-head">
+        <div>
+          <h3>已配置模型</h3>
+          <p class="hint">同时保留多个模型配置；圆点选中即为当前使用模型。</p>
+        </div>
+        <button id="toggleAddModel" class="btn">添加模型</button>
+      </div>
+      <div id="configuredModelList" class="model-list"></div>
+      <div id="addModelPanel" class="panel hidden">
+        <div class="model-kind-tabs" id="addModelTabs">
+          <button class="model-kind-tab active" data-add-kind="official">添加官方厂商</button>
+          <button class="model-kind-tab" data-add-kind="third-party">添加第三方模型</button>
+        </div>
+        <div id="addOfficialSection">
+          <div class="form-row">
+            <label class="field">
+              <span>厂商</span>
+              <select id="officialVendor" class="input"></select>
+            </label>
+            <div class="field model-picker">
+              <span>模型名</span>
+              <div class="model-picker-row">
+                <input id="officialModel" class="input" placeholder="例如 gpt-4o-mini">
+                <button id="fetchOfficialModels" class="btn ghost" type="button">获取模型</button>
+              </div>
+              <select id="officialModelSelect" class="input hidden"></select>
+            </div>
+            <label class="field">
+              <span>API Key</span>
+              <input id="officialKey" class="input" type="password" placeholder="粘贴 API Key">
+            </label>
+          </div>
+          <div class="settings-actions">
+            <button id="addOfficialProvider" class="btn primary">添加官方模型</button>
+            <span id="officialAddHint" class="hint">官方厂商使用内置请求地址，不需要填写 Base URL。</span>
+          </div>
+        </div>
+        <div id="addThirdPartySection" class="hidden">
+          <div class="form-row">
+            <label class="field">
+              <span>标识（英文）</span>
+              <input id="customProviderId" class="input" placeholder="例如 my-gateway">
+            </label>
+            <label class="field">
+              <span>显示名称</span>
+              <input id="customProviderLabel" class="input" placeholder="例如 公司网关 / 本地代理">
+            </label>
+            <label class="field narrow">
+              <span>协议</span>
+              <select id="customProviderProtocol" class="input">
+                <option value="openai-compatible">OpenAI-compatible</option>
+                <option value="anthropic-compatible">Anthropic-compatible</option>
+              </select>
+            </label>
+          </div>
+          <label class="field">
+            <span>Base URL</span>
+            <input id="customProviderBase" class="input" placeholder="https://gateway.example.com/v1">
+          </label>
+          <div class="form-row">
+            <div class="field model-picker">
+              <span>模型名</span>
+              <div class="model-picker-row">
+                <input id="customProviderModel" class="input" placeholder="例如 gpt-4o-mini / claude-3-5-sonnet">
+                <button id="fetchCustomModels" class="btn ghost" type="button">获取模型</button>
+              </div>
+              <select id="customProviderModelSelect" class="input hidden"></select>
+            </div>
+            <label class="field">
+              <span>API Key</span>
+              <input id="customProviderKey" class="input" type="password" placeholder="粘贴 API Key">
+            </label>
+          </div>
+          <div class="settings-actions">
+            <button id="addCustomProvider" class="btn primary">添加第三方模型</button>
+            <span id="customProviderHint" class="hint">第三方模型必须填写 Base URL。</span>
+          </div>
+        </div>
+      </div>
+      <div class="settings-card" id="embeddingCard">
+        <h3>向量检索</h3>
+        <p class="hint" style="margin-top:-6px">默认使用本地 n-gram，不需要 Key。配置 OpenAI / Gemini / Ollama 后，重建索引即可使用外部 embedding。</p>
+        <div class="form-row">
+          <label class="field narrow">
+            <span>Embedding Provider</span>
+            <select id="embeddingProvider" class="input">
+              <option value="local">本地 n-gram</option>
+              <option value="openai">OpenAI</option>
+              <option value="gemini">Google Gemini</option>
+              <option value="ollama">Ollama（本地）</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Embedding 模型</span>
+            <input id="embeddingModel" class="input" placeholder="text-embedding-3-small / bge-m3">
+          </label>
+        </div>
+        <label class="field">
+          <span>Base URL</span>
+          <input id="embeddingBase" class="input" placeholder="留空使用默认地址">
+        </label>
+        <label class="field">
+          <span>Embedding API Key</span>
+          <input id="embeddingKey" class="input" type="password" placeholder="本地 n-gram / Ollama 不需要">
+        </label>
+        <div class="settings-actions">
+          <button id="testEmbedding" class="btn">测试</button>
+          <button id="rebuildEmbedding" class="btn primary">重建向量索引</button>
+          <button id="incrementalEmbedding" class="btn ghost">补全待索引</button>
+          <span id="embeddingHint" class="hint"></span>
+        </div>
+      </div>
+      </div>
+      <div id="settings-panel-profile" class="settings-panel hidden">
+      <div class="settings-card">
+        <h3>个人画像</h3>
+        <p class="hint" style="margin-top:-6px">岗位、技能、学习目标会一起用于资讯匹配度分析。</p>
+
+        <div class="profile-section">
+          <h4>岗位信息</h4>
+          <div class="form-row">
+            <label class="field">
+              <span>工作岗位</span>
+              <input id="profileRole" class="input" list="profileRoleOptions" placeholder="输入或选择岗位，例如：高级后端工程师">
+              <datalist id="profileRoleOptions">
+                <option value="后端工程师"></option>
+                <option value="高级后端工程师"></option>
+                <option value="系统工程师"></option>
+                <option value="C++ 开发工程师"></option>
+                <option value="Qt/C++ 开发工程师"></option>
+                <option value="嵌入式工程师"></option>
+                <option value="Python 开发工程师"></option>
+                <option value="Go 开发工程师"></option>
+                <option value="Rust 开发工程师"></option>
+                <option value="AI 工程师"></option>
+                <option value="算法工程师"></option>
+                <option value="数据工程师"></option>
+                <option value="架构师"></option>
+                <option value="技术负责人"></option>
+                <option value="产品经理"></option>
+                <option value="其他"></option>
+              </datalist>
+            </label>
+            <label class="field narrow">
+              <span>当前水平</span>
+              <input id="profileLevel" class="input" placeholder="初级 / 中级 / 高级">
+            </label>
+            <label class="field narrow">
+              <span>每周投入（小时）</span>
+              <input id="profileHours" class="input" type="number" min="1" max="60" value="5">
+            </label>
+          </div>
+          <label class="check"><input id="profileTechnical" type="checkbox"> 技术岗位</label>
+          <div id="profileLanguagesBox" class="profile-language-box">
+            <span>编程语言（可多选）</span>
+            <div id="profileLanguages" class="filter-chip-group"></div>
+          </div>
+        </div>
+
+        <div class="profile-section">
+          <h4>技能信息</h4>
+          <label class="field">
+            <span>已有技能（逗号分隔）</span>
+            <input id="profileSkills" class="input" placeholder="C++, Rust, Python, 网络编程">
+          </label>
+        </div>
+
+        <div class="profile-section">
+          <h4>学习目标</h4>
+          <label class="field">
+            <span>后续想学习的技能 / 方向（逗号分隔）</span>
+            <input id="profileGoals" class="input" placeholder="系统设计, 分布式, AI 工程化, 数据库">
+          </label>
+        </div>
+        <div class="settings-actions">
+          <button id="scoreAll" class="btn ghost">评估全部资讯</button>
+          <button id="learnProfile" class="btn ghost">根据反馈优化画像</button>
+          <button id="applyProfile" class="btn primary hidden">应用建议</button>
+          <span id="scoreHint" class="hint"></span>
+          <span id="profileLearnHint" class="hint"></span>
+        </div>
+      </div>
+      </div>
+      <div id="settings-panel-collect" class="settings-panel hidden">
+      <div class="settings-card">
+        <h3>知识库与采集</h3>
+        <div class="field">
+          <span>知识库位置（固定）</span>
+          <div id="vaultPathInfo" class="path-readonly"></div>
+          <span class="hint">与 AtlasPKM.exe 同目录；首次启动自动创建 vault 和 data。</span>
+        </div>
+        <label class="field">
+          <span>GitHub Token（可选，提高 API 配额）</span>
+          <input id="githubToken" class="input" type="password" placeholder="留空保持不变">
+        </label>
+        <label class="field">
+          <span>抓取时间范围</span>
+          <select id="feedWindow" class="input">
+            <option value="1">最近 24 小时</option>
+            <option value="3" selected>最近 3 天</option>
+            <option value="7">最近 7 天</option>
+          </select>
+        </label>
+        <label class="check" style="margin: 4px 0 12px">
+          <input id="queryExpansion" type="checkbox"> 问答前用模型扩展检索词（多一次调用）
+        </label>
+      </div>
+      <div class="settings-card">
+        <h3>定时采集</h3>
+        <label class="check"><input id="autoRefresh" type="checkbox"> 启用定时采集</label>
+        <div class="schedule-mode-tabs" id="scheduleModeTabs">
+          <button class="schedule-mode-tab active" data-schedule-mode="daily">每天固定时间</button>
+          <button class="schedule-mode-tab" data-schedule-mode="interval">固定间隔</button>
+        </div>
+        <div id="dailyScheduleRow" class="form-row">
+          <label class="field narrow">
+            <span>每天采集时间</span>
+            <input id="dailyTime" class="input" type="time" value="06:00">
+          </label>
+          <span class="hint">默认每天早上 6:00；应用在该时间点未运行时，启动后会补跑一次。</span>
+        </div>
+        <div id="intervalScheduleRow" class="form-row hidden">
+          <label class="field narrow">
+            <span>间隔（分钟）</span>
+            <input id="refreshInterval" class="input" type="number" min="15" max="1440" value="120">
+          </label>
+          <span class="hint">从上一次采集完成开始计时。</span>
+        </div>
+        <div class="form-row">
+          <label class="check"><input id="autoGithub" type="checkbox"> 同时抓取 GitHub 热门</label>
+        </div>
+        <div class="form-row">
+          <label class="check"><input id="autoReview" type="checkbox"> 自动生成周期复盘</label>
+          <label class="field narrow">
+            <span>复盘间隔（天）</span>
+            <input id="reviewInterval" class="input" type="number" min="1" max="90" value="7">
+          </label>
+        </div>
+        <div class="field">
+          <span>资讯来源</span>
+          <div class="source-group-tabs" id="sourceGroupTabs">
+            <button class="source-group-tab active" data-source-group="github">GitHub 订阅</button>
+            <button class="source-group-tab" data-source-group="other">其他来源</button>
+          </div>
+          <div id="sourceList" class="source-list"></div>
+        </div>
+        <div class="source-add-box">
+          <div class="form-row source-add">
+            <select id="newSourceAdapter" class="input"></select>
+            <input id="newSourceUrl" class="input" placeholder="博主主页 / RSS / CSDN / Qt Blog 地址">
+            <input id="newSourceQuery" class="input hidden" placeholder="查询词，例如 C++、Qt、compiler">
+            <input id="newSourceLanguage" class="input hidden" placeholder="语言，例如 C++（可选）">
+            <input id="newSourceStars" class="input hidden" type="number" min="0" placeholder="最低 Star（可选）">
+            <input id="newSourceName" class="input" placeholder="名称（可选）">
+          </div>
+          <div class="form-row">
+            <button id="discoverSource" class="btn ghost">自动识别</button>
+            <button id="addSource" class="btn primary">添加并抓取</button>
+            <span id="sourceAddHint" class="hint"></span>
+          </div>
+        </div>
+        <details class="source-catalog">
+          <summary>推荐来源：重点博客 / 科技公司 / 学术出版 / 国内社区</summary>
+          <div id="sourceCatalog" class="source-catalog-list"></div>
+          <div class="form-row">
+            <button id="importCatalog" class="btn primary">导入选中来源</button>
+            <span id="catalogHint" class="hint">重点博客默认勾选，可自行增减。</span>
+          </div>
+        </details>
+        <div class="settings-actions">
+          <button id="runScheduler" class="btn">增量采集一次</button>
+          <span id="schedulerHint" class="hint"></span>
+        </div>
+      </div>
+      <div class="settings-card muted-card">
+        <h3>第一版边界</h3>
+        <p>不做成本管理、提示注入防护、数据脱敏、质量评估和厂商自动回退。请求失败会直接提示；解析失败不会写入知识库。</p>
+      </div>
+      </div>
+      <div class="settings-savebar">
+        <button id="saveSettings" class="btn primary">保存设置</button>
+        <button id="testProvider" class="btn">测试当前模型</button>
+        <span id="settingsHint" class="hint"></span>
+      </div>
+    </section>
+  </main>
+</div>
+<div id="toast" class="toast hidden"></div>
+<script src="/static/app.js?v=20261029-feed-replace"></script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

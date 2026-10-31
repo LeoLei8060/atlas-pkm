@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ page_title }} · {{ site_title }}</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">LLM <span>Wiki</span></div>
+    <div class="side-sub">本地知识库 · 只读视图</div>
+    <h3>导航</h3>
+    <a class="note-link" href="index.html">全部笔记</a>
+    <h3>笔记</h3>
+    {% for note in notes %}
+      <a class="note-link {% if note.path == current %}active{% endif %}" href="{{ note.href }}">{{ note.title }}</a>
+    {% endfor %}
+  </aside>
+  <main class="main">
+    <h1 class="page-title">{{ page_title }}</h1>
+    <div class="meta">
+      {% if meta.type %}<code>{{ meta.type }}</code>{% endif %}
+      {% if meta.status %}<code>{{ meta.status }}</code>{% endif %}
+      {% if meta.updated_at %}<span>{{ meta.updated_at }}</span>{% endif %}
+      {% if meta.source_url %}<a href="{{ meta.source_url }}" target="_blank" rel="noreferrer">原始来源</a>{% endif %}
+    </div>
+    <article>{{ content|safe }}</article>
+  </main>
+</div>
+</body>
+</html>

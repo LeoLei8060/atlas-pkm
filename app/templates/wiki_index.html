@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ site_title }}</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">LLM <span>Wiki</span></div>
+    <div class="side-sub">本地知识库 · 只读视图</div>
+    <h3>导航</h3>
+    <a class="note-link active" href="index.html">全部笔记</a>
+    <h3>笔记</h3>
+    {% for note in notes %}
+      <a class="note-link" href="{{ note.href }}">{{ note.title }}</a>
+    {% endfor %}
+  </aside>
+  <main class="main">
+    <h1 class="page-title">知识库</h1>
+    <div class="meta">共 {{ notes|length }} 篇笔记 · 由 Markdown Vault 生成</div>
+    <input id="filter" class="search" placeholder="筛选笔记标题…" autocomplete="off">
+    {% if empty %}
+      <div class="empty">还没有笔记。回到应用，配置模型并保存第一条资讯。</div>
+    {% else %}
+      <div class="index-grid" id="grid">
+        {% for note in notes %}
+          <a class="index-card" href="{{ note.href }}" data-title="{{ note.title|lower }}">
+            <h3>{{ note.title }}</h3>
+            <p>{{ note.path }} · {{ note.meta.get('type', 'note') }}</p>
+          </a>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </main>
+</div>
+<script>
+  const filter = document.getElementById('filter');
+  if (filter) {
+    filter.addEventListener('input', () => {
+      const q = filter.value.trim().toLowerCase();
+      document.querySelectorAll('.index-card').forEach(card => {
+        card.style.display = card.dataset.title.includes(q) ? '' : 'none';
+      });
+    });
+  }
+</script>
+</body>
+</html>

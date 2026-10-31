@@ -1,0 +1,28 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Runtime application state (may contain API keys and personal data)
+data/
+vault/
+
+# Packaging / generated artifacts
+build/
+dist/
+*.spec
+*.log
+
+# Local QA artifacts
+qa/
+.env
+.env.*
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
