@@ -202,6 +202,25 @@ _system
 
 ---
 
+## 平台支持
+
+| 平台 | 源码/后端 | 桌面窗口 | 托盘 | 安装包 |
+|---|---|---|---|---|
+| Windows 10/11 | ✅ | ✅ WebView2 | ✅ | ✅ 便携 exe / 安装脚本 |
+| Linux | ✅ 可用 `python run.py` | ⚠️ 需浏览器打开，未提供原生打包 | ❌ | ❌ |
+| macOS | 未验证 | 未验证 | ❌ | ❌ |
+
+Linux 当前属于“源码运行支持”：
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python run.py
+```
+
+然后打开 `http://127.0.0.1:8787`。`desktop.py` 在 Linux 上会回退到系统默认浏览器；`pywebview`、系统托盘和 PowerShell 安装脚本仅面向 Windows。
+
 ## 部署方式
 
 ### 方式一：便携 exe（推荐给普通用户）
