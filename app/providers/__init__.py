@@ -5,14 +5,10 @@ from typing import Any
 import httpx
 
 from .anthropic import AnthropicProvider
-from .base import (
-    DEFAULT_THIRD_PARTY_USER_AGENT,
-    BaseProvider,
-    ProviderError,
-    ProviderNotConfigured,
-)
+from .base import BaseProvider, ProviderError, ProviderNotConfigured
 from .gemini import GeminiProvider
 from .openai import DeepSeekProvider, OpenAIProvider
+from .responses import OpenAIResponsesProvider
 
 PROVIDERS: dict[str, type[BaseProvider]] = {
     "openai": OpenAIProvider,
@@ -39,12 +35,12 @@ def build_provider(
         protocol = str(config.get("protocol") or "openai-compatible").lower()
         if protocol in {"anthropic", "anthropic-compatible"}:
             cls = AnthropicProvider
+        elif protocol in {"responses", "openai-responses"}:
+            cls = OpenAIResponsesProvider
         elif protocol in {"openai", "openai-compatible"}:
             cls = OpenAIProvider
         else:
             raise ProviderError(f"不支持的第三方模型协议: {protocol}", 400)
-        if not str(config.get("user_agent") or "").strip():
-            config = {**config, "user_agent": DEFAULT_THIRD_PARTY_USER_AGENT}
     provider = cls(config, client=client)
     if name not in PROVIDERS:
         provider.name = name

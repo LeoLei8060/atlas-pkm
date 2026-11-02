@@ -33,11 +33,11 @@ class AnthropicProvider(BaseProvider):
         }
         if system:
             body["system"] = system
-        headers = self.request_headers({
+        headers = {
             "x-api-key": self.api_key,
             "anthropic-version": "2023-06-01",
             "Content-Type": "application/json",
-        })
+        }
         async with self.http() as client:
             response = await client.post(
                 f"{self.base_url}/messages", json=body, headers=headers
@@ -63,10 +63,10 @@ class AnthropicProvider(BaseProvider):
     async def list_models(self) -> list[str]:
         if not self.api_key:
             raise ProviderNotConfigured()
-        headers = self.request_headers({
+        headers = {
             "x-api-key": self.api_key,
             "anthropic-version": "2023-06-01",
-        })
+        }
         async with self.http() as client:
             response = await client.get(
                 f"{self.base_url}/models",

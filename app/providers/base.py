@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+import urllib.parse
+import urllib.request
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator
@@ -28,13 +31,6 @@ class ChatResult:
     usage: dict[str, Any] | None = None
 
 
-DEFAULT_THIRD_PARTY_USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/131.0.0.0 Safari/537.36"
-)
-
-
 class BaseProvider:
     name = "base"
     default_base_url = ""
@@ -48,18 +44,30 @@ class BaseProvider:
         self.api_key = str(self.config.get("api_key") or "").strip()
         self.model = str(self.config.get("model") or "").strip()
         self.base_url = str(self.config.get("base_url") or self.default_base_url).rstrip("/")
-        self.user_agent = str(self.config.get("user_agent") or "").strip()
         self._client = client
-
-    def request_headers(self, extra: dict[str, str] | None = None) -> dict[str, str]:
-        headers = dict(extra or {})
-        if self.user_agent:
-            headers["User-Agent"] = self.user_agent
-        return headers
 
     @property
     def configured(self) -> bool:
         return bool(self.api_key and self.model)
+
+    def proxy_url(self) -> str | None:
+        """Use the user's HTTP proxy without letting malformed no_proxy break URLs."""
+        host = (urllib.parse.urlparse(self.base_url).hostname or "").lower()
+        if host in {"localhost", "127.0.0.1", "::1"}:
+            return None
+        for key in ("HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"):
+            value = os.environ.get(key, "").strip()
+            if value.lower().startswith(("http://", "https://")):
+                return value
+        try:
+            proxies = urllib.request.getproxies()
+        except Exception:
+            proxies = {}
+        for key in ("https", "http"):
+            value = str(proxies.get(key) or "").strip()
+            if value.lower().startswith(("http://", "https://")):
+                return value
+        return None
 
     @asynccontextmanager
     async def http(self) -> AsyncIterator[httpx.AsyncClient]:
@@ -69,6 +77,7 @@ class BaseProvider:
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(90.0, connect=15.0),
             trust_env=False,
+            proxy=self.proxy_url(),
         ) as client:
             yield client
 

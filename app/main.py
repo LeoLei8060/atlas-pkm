@@ -84,11 +84,12 @@ class ProviderPatch(BaseModel):
 class CustomProviderCreate(BaseModel):
     id: str = Field(min_length=2, max_length=40, pattern=r"^[a-z][a-z0-9_-]*$")
     label: str = Field(min_length=1, max_length=80)
-    protocol: Literal["openai-compatible", "anthropic-compatible"] = "openai-compatible"
+    protocol: Literal[
+        "openai-compatible", "openai-responses", "anthropic-compatible"
+    ] = "openai-compatible"
     base_url: str = Field(min_length=8, max_length=500)
     model: str = Field(min_length=1, max_length=160)
     api_key: str = Field(default="", max_length=4000)
-    user_agent: str = Field(default="", max_length=500)
 
 
 class EmbeddingUpdate(BaseModel):
@@ -141,8 +142,9 @@ class ListModelsRequest(BaseModel):
     provider: str | None = None
     api_key: str | None = None
     base_url: str | None = None
-    protocol: Literal["openai-compatible", "anthropic-compatible"] | None = None
-    user_agent: str | None = None
+    protocol: Literal[
+        "openai-compatible", "openai-responses", "anthropic-compatible"
+    ] | None = None
 
 
 class RefreshRequest(BaseModel):
@@ -334,7 +336,6 @@ def create_app() -> FastAPI:
             "base_url": body.base_url.rstrip("/"),
             "model": body.model.strip(),
             "api_key": body.api_key,
-            "user_agent": body.user_agent.strip(),
         }
         save_config(config)
         return masked_config(config)
@@ -521,8 +522,6 @@ def create_app() -> FastAPI:
             item["base_url"] = body.base_url.strip().rstrip("/")
         if body.protocol:
             item["protocol"] = body.protocol
-        if body.user_agent is not None:
-            item["user_agent"] = body.user_agent.strip()
         if not item.get("base_url") and name == "custom":
             raise HTTPException(400, "第三方模型需要 Base URL")
         provider = build_provider(name, item)

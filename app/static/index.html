@@ -300,19 +300,15 @@
             <label class="field narrow">
               <span>协议</span>
               <select id="customProviderProtocol" class="input">
-                <option value="openai-compatible">OpenAI-compatible</option>
-                <option value="anthropic-compatible">Anthropic-compatible</option>
+                <option value="openai-compatible">OpenAI Chat Completions</option>
+                <option value="openai-responses">OpenAI Responses</option>
+                <option value="anthropic-compatible">Anthropic Messages</option>
               </select>
             </label>
           </div>
           <label class="field">
             <span>Base URL</span>
             <input id="customProviderBase" class="input" placeholder="https://gateway.example.com/v1">
-          </label>
-          <label class="field">
-            <span>User-Agent（可选）</span>
-            <input id="customProviderUA" class="input" placeholder="留空使用浏览器型 User-Agent">
-            <span class="hint">部分中转站要求 Claude/Codex/浏览器型 UA；被 403 拒绝时可在这里填写。</span>
           </label>
           <div class="form-row">
             <div class="field model-picker">

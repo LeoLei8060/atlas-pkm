@@ -621,8 +621,9 @@ data/config.json
 - 第三方 OpenAI-compatible
 - 第三方 Anthropic-compatible
 - 模型列表发现：填写 Key/Base URL 后可获取厂商模型列表
-- 第三方网关可单独填写 `User-Agent`；部分中转站会按 UA 拒绝请求
-- 第三方网关的协议和 Base URL 必须匹配：OpenAI 兼容通常以 `/v1` 结尾，Anthropic 兼容通常不带 `/v1`
+- 第三方协议支持三种：OpenAI Chat Completions、OpenAI Responses、Anthropic Messages
+- 第三方网关的协议和 Base URL 必须匹配；不同中转站的路径规则可能不同
+- 模型请求会自动使用 `HTTPS_PROXY` / `HTTP_PROXY` 或 Windows 系统代理；本地 Base URL 会跳过代理
 
 当前实测主要使用 DeepSeek；其他适配器保留但需要对应 Key 验证。
 
