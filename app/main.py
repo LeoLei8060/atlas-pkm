@@ -65,6 +65,12 @@ from .services.feeds import (
 )
 from .services.source_adapters import discover_source, fetch_source as fetch_configured_source
 from .services.source_catalog import add_catalog_sources, list_catalog
+from .services.usage_accounts import (
+    add_account as add_usage_account,
+    delete_account as delete_usage_account,
+    fetch_all as fetch_usage_accounts,
+    list_accounts as list_usage_accounts,
+)
 from .services.notes import save_feed_as_source
 from .services.patches import apply_patch, list_patches, make_answer_patch, reject_patch
 from .services.search import rebuild_search_index, search
@@ -223,6 +229,16 @@ class SourceCreate(BaseModel):
 
 class GitHubFavoriteRequest(BaseModel):
     item: dict[str, Any]
+
+
+class UsageAccountCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    kind: Literal["newapi", "deepseek"] = "newapi"
+    base_url: str = Field(default="", max_length=500)
+    user_id: str = Field(default="", max_length=80)
+    access_token: str = Field(default="", max_length=4000)
+    api_key: str = Field(default="", max_length=4000)
+    platform_token: str = Field(default="", max_length=4000)
 
 
 class CatalogAddRequest(BaseModel):
@@ -542,6 +558,27 @@ def create_app() -> FastAPI:
             "base_url": provider.base_url,
             "models": models,
         }
+
+    @app.get("/api/usage/accounts")
+    async def usage_accounts():
+        return {"items": list_usage_accounts()}
+
+    @app.post("/api/usage/accounts")
+    async def create_usage_account(body: UsageAccountCreate):
+        try:
+            return add_usage_account(body.model_dump())
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.delete("/api/usage/accounts/{account_id}")
+    async def remove_usage_account(account_id: str):
+        if not delete_usage_account(account_id):
+            raise HTTPException(404, "用量账户不存在")
+        return {"deleted": True}
+
+    @app.get("/api/usage/overview")
+    async def usage_overview(force: bool = False):
+        return {"items": await fetch_usage_accounts(force=force)}
 
     @app.get("/api/feed")
     async def feed(

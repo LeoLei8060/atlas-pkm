@@ -59,6 +59,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     "github_token": "",
     "model_health": {},
+    "usage_accounts": [],
     "language": "zh-CN",
     "profile": {
         "target_role": "",
@@ -222,5 +223,16 @@ def masked_config(config: dict[str, Any]) -> dict[str, Any]:
     result["embedding"] = embedding
     result["github_token_set"] = bool(result.get("github_token"))
     result["github_token"] = ""
+    accounts = []
+    for item in result.get("usage_accounts") or []:
+        item = dict(item or {})
+        item["has_access_token"] = bool(item.get("access_token"))
+        item["has_api_key"] = bool(item.get("api_key"))
+        item["has_platform_token"] = bool(item.get("platform_token"))
+        item["access_token"] = ""
+        item["api_key"] = ""
+        item["platform_token"] = ""
+        accounts.append(item)
+    result["usage_accounts"] = accounts
     result["ready"] = ready
     return result

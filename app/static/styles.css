@@ -565,3 +565,15 @@ textarea.input { width: 100%; resize: vertical; min-height: 92px; line-height: 1
 .chip.warn { color: #9a6b1f; border-color: #d9b26a; background: #fbf3df; }
 .chip.danger { color: #9d3d3d; border-color: #dfA0a0; background: #fbebeb; }
 .path-readonly { border: 1px solid var(--line); background: var(--paper-2); border-radius: 7px; padding: 8px 10px; font-family: Consolas, monospace; font-size: 11.5px; color: var(--muted); word-break: break-all; }
+
+.usage-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.usage-card { border: 1px solid var(--line); border-radius: 11px; background: var(--card); padding: 14px; }
+.usage-card h4 { margin: 0 0 8px; }
+.usage-stat { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; font-size: 12px; border-bottom: 1px dashed var(--line); }
+.usage-stat:last-child { border-bottom: 0; }
+.usage-stat span { color: var(--muted); }
+.usage-stat strong { font-variant-numeric: tabular-nums; }
+.usage-accounts { display: grid; gap: 8px; margin: 10px 0; }
+.usage-account-row { display: flex; gap: 8px; align-items: center; justify-content: space-between; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.usage-account-row small { color: var(--muted); display: block; }
+.usage-note { color: var(--muted); font-size: 11px; margin-top: 6px; }

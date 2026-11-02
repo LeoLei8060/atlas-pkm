@@ -5,6 +5,9 @@ const state = {
   collections: [],
   collectionTab: 'rss',
   patches: [],
+  usageAccounts: [],
+  usageData: [],
+  usageLoading: false,
   sources: [],
   sourceCatalog: [],
   sourceCatalogLoaded: false,
@@ -37,6 +40,7 @@ const VIEW_META = {
   dashboard: ['概览', '本地知识库与 Agent 的运行状态'],
   feed: ['资讯', 'RSS 资讯与 GitHub 技术栈榜单'],
   collections: ['收藏', '你主动留下的内容'],
+  usage: ['用量', '各模型平台的 Token 消耗与余额'],
   wiki: ['LLM Wiki', '从 Markdown Vault 生成的只读视图'],
   learning: ['学习', '生成知识文档、面试题与周期复盘'],
   graph: ['图谱', '笔记之间的链接与标签关系'],
@@ -320,6 +324,7 @@ function setView(view, updateHash = true) {
     loadWikiSyncStatus();
   }
   if (view === 'graph') loadGraph();
+  if (view === 'usage') loadUsage();
   if (view === 'learning') {
     renderLearning();
     loadReviewStats();
@@ -889,6 +894,125 @@ function renderCollections() {
     return;
   }
   container.innerHTML = items.map(item => feedCard(item, { collection: true })).join('');
+}
+
+async function loadUsage(force = false) {
+  const summary = $('#usageSummary');
+  if (summary && state.usageLoading) return;
+  state.usageLoading = true;
+  if (summary) summary.innerHTML = '<div class="hint">正在读取平台用量…</div>';
+  try {
+    const accounts = await api('/api/usage/accounts');
+    state.usageAccounts = accounts.items || [];
+    let data = [];
+    if (state.usageAccounts.length) {
+      const result = await api(`/api/usage/overview${force ? '?force=true' : ''}`);
+      data = result.items || [];
+    }
+    state.usageData = data;
+    renderUsage();
+  } catch (error) {
+    if (summary) summary.innerHTML = `<div class="hint">${esc(error.message)}</div>`;
+  } finally {
+    state.usageLoading = false;
+  }
+}
+
+function usageMoney(value, currency = '¥') {
+  if (value === null || value === undefined) return '—';
+  return `${currency}${Number(value).toFixed(2)}`;
+}
+
+function renderUsage() {
+  const summary = $('#usageSummary');
+  const accounts = $('#usageAccounts');
+  if (!summary || !accounts) return;
+  if (!state.usageAccounts.length) {
+    summary.innerHTML = emptyState('还没有用量账户', '添加 DeepSeek、米醋或 CCTQ 账户后，这里会显示 Token 消耗和余额。');
+  } else {
+    summary.innerHTML = state.usageData.map(item => {
+      if (!item.ok) {
+        return `<div class="usage-card"><h4>${esc(item.name)}</h4><div class="hint">${esc(item.error || '读取失败')}</div></div>`;
+      }
+      const balance = item.balance || {};
+      const today = item.today || {};
+      const period = item.period || {};
+      const models = (item.models || []).slice(0, 6)
+        .map(model => `<div class="usage-stat"><span>${esc(model.model)}</span><strong>${fmtCount(model.tokens)}</strong></div>`).join('');
+      return `<div class="usage-card">
+        <h4>${esc(item.name)}</h4>
+        <div class="usage-stat"><span>余额</span><strong>${usageMoney(balance.remaining, balance.currency || '¥')}</strong></div>
+        ${balance.used !== undefined ? `<div class="usage-stat"><span>累计已用</span><strong>${usageMoney(balance.used, balance.currency || '¥')}</strong></div>` : ''}
+        <div class="usage-stat"><span>今日 Token</span><strong>${fmtCount(today.tokens || 0)}</strong></div>
+        <div class="usage-stat"><span>今日请求</span><strong>${fmtCount(today.requests || 0)}</strong></div>
+        <div class="usage-stat"><span>近 30 天 Token</span><strong>${fmtCount(period.tokens || 0)}</strong></div>
+        ${models ? `<div class="usage-note">按模型</div>${models}` : ''}
+        ${item.note ? `<div class="usage-note">${esc(item.note)}</div>` : ''}
+      </div>`;
+    }).join('');
+  }
+  accounts.innerHTML = state.usageAccounts.map(account => {
+    const credential = account.kind === 'deepseek'
+      ? `API Key ${account.has_api_key ? '已配置' : '未配置'}${account.has_platform_token ? ' · Platform Token 已配置' : ''}`
+      : `${account.base_url || '未填写 Base URL'} · 用户 ${account.user_id || '未填写'} · Token ${account.has_access_token ? '已配置' : '未配置'}`;
+    return `<div class="usage-account-row">
+      <div><strong>${esc(account.name)}</strong><small>${esc(credential)}</small></div>
+      <button class="btn danger small" data-delete-usage="${esc(account.id)}">删除</button>
+    </div>`;
+  }).join('');
+}
+
+async function addUsageAccount() {
+  const button = $('#addUsageAccount');
+  const kind = $('#usageKind').value;
+  const payload = {
+    name: $('#usageName').value.trim(),
+    kind,
+    base_url: $('#usageBaseUrl').value.trim(),
+    user_id: $('#usageUserId').value.trim(),
+    access_token: $('#usageAccessToken').value.trim(),
+    api_key: $('#usageApiKey').value.trim(),
+    platform_token: $('#usagePlatformToken').value.trim(),
+  };
+  if (!payload.name) {
+    toast('填写账户名称', 'error');
+    return;
+  }
+  if (kind === 'newapi' && (!payload.base_url || !payload.access_token || !payload.user_id)) {
+    toast('New API 需要 Base URL、Access Token 和用户 ID', 'error');
+    return;
+  }
+  if (kind === 'deepseek' && !payload.api_key && !payload.platform_token) {
+    toast('DeepSeek 需要 API Key 或 Platform Token', 'error');
+    return;
+  }
+  busy(button, true);
+  try {
+    await api('/api/usage/accounts', { method: 'POST', body: JSON.stringify(payload) });
+    $('#usageName').value = '';
+    $('#usageBaseUrl').value = '';
+    $('#usageUserId').value = '';
+    $('#usageAccessToken').value = '';
+    $('#usageApiKey').value = '';
+    $('#usagePlatformToken').value = '';
+    toast('用量账户已保存');
+    await loadUsage(true);
+  } catch (error) {
+    $('#usageHint').textContent = error.message;
+    toast(error.message, 'error');
+  } finally {
+    busy(button, false);
+  }
+}
+
+async function deleteUsageAccount(accountId) {
+  if (!confirm('删除该用量账户？')) return;
+  try {
+    await api(`/api/usage/accounts/${accountId}`, { method: 'DELETE' });
+    await loadUsage(true);
+  } catch (error) {
+    toast(error.message, 'error');
+  }
 }
 
 function renderPatches() {
@@ -2457,6 +2581,17 @@ function bindEvents() {
   $('#buildWiki').addEventListener('click', buildWiki);
   $('#refreshPatches').addEventListener('click', loadPatches);
   $('#refreshCollections').addEventListener('click', loadCollections);
+  $('#refreshUsage').addEventListener('click', () => loadUsage(true));
+  $('#addUsageAccount').addEventListener('click', addUsageAccount);
+  $('#usageKind').addEventListener('change', () => {
+    const deepseek = $('#usageKind').value === 'deepseek';
+    $('#usageNewapiFields').classList.toggle('hidden', deepseek);
+    $('#usageDeepseekFields').classList.toggle('hidden', !deepseek);
+  });
+  $('#usageAccounts').addEventListener('click', event => {
+    const button = event.target.closest('[data-delete-usage]');
+    if (button) deleteUsageAccount(button.dataset.deleteUsage);
+  });
   $$('.collection-tab').forEach(tab => {
     tab.addEventListener('click', () => {
       state.collectionTab = tab.dataset.collectionTab;

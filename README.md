@@ -11,7 +11,7 @@ Atlas PKM 是一个面向个人使用者的桌面应用。资讯、索引、模�
 
 当前版本：`0.1.0`  
 桌面端：Windows 10/11（WebView2）  
-测试：80 项自动化测试通过
+测试：84 项自动化测试通过
 
 ---
 
@@ -162,7 +162,23 @@ _system
 - 可选外部 Embedding：OpenAI / Gemini / Ollama。
 - 混合检索用于搜索和问答上下文。
 
-### 9. 桌面体验
+### 9. 多平台模型用量
+
+- 新增“用量”页面。
+- 支持 DeepSeek API Key 查询余额。
+- 支持 DeepSeek Platform Token 查询详细 Token 用量。
+- 支持米醋、CCTQ 等 New API 中转站：
+  - `Access Token + 用户 ID` 读取账户级用量
+  - 剩余/累计额度
+  - 今日 Token 和请求数
+  - 近 30 天 Token
+  - 按模型统计
+- 外部用量结果缓存 5 分钟，避免频繁请求平台。
+- 用量账户令牌不会出现在 API 响应中。
+
+> 中转站需要使用个人资料中的 **Access Token + 数字用户 ID**，不是 `sk-` 模型 API Key。
+
+### 10. 桌面体验
 
 - 便携 exe，不要求目标机器安装 Python。
 - WebView2 原生窗口；不可用时回退 Edge/Chrome 应用窗口。
@@ -824,3 +840,5 @@ pkm-app/
 ## License
 
 当前仓库尚未包含 `LICENSE` 文件。正式开源发布前需要选择并添加许可证；在添加之前，不应默认视为 MIT 或其他开源许可。
+
+

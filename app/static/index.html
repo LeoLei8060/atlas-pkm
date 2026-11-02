@@ -21,6 +21,7 @@
       <button class="nav-item active" data-view="dashboard"><span>◈</span>概览</button>
       <button class="nav-item" data-view="feed"><span>◉</span>资讯</button>
       <button class="nav-item" data-view="collections"><span>▣</span>收藏</button>
+      <button class="nav-item" data-view="usage"><span>◫</span>用量</button>
       <button class="nav-item" data-view="wiki"><span>▤</span>LLM Wiki</button>
       <button class="nav-item" data-view="learning"><span>✦</span>学习</button>
       <button class="nav-item" data-view="graph"><span>⌘</span>图谱</button>
@@ -123,6 +124,53 @@
         <button class="collection-tab" data-collection-tab="github">GitHub</button>
       </div>
       <div id="collectionsList" class="card-list"></div>
+    </section>
+
+    <section id="view-usage" class="view">
+      <div class="section-head">
+        <div>
+          <h2>模型用量</h2>
+          <p>从 DeepSeek 和 New API 中转站读取账户级 Token 消耗与余额。</p>
+        </div>
+        <button id="refreshUsage" class="btn ghost">刷新用量</button>
+      </div>
+      <div id="usageSummary" class="usage-grid"></div>
+      <div class="panel">
+        <div class="section-head">
+          <div>
+            <h3>平台账户</h3>
+            <p class="hint">DeepSeek 使用 API Key 查余额；详细 Token 可填 Platform Token。米醋 / CCTQ 使用 New API 的 Access Token + 用户 ID。</p>
+          </div>
+        </div>
+        <div id="usageAccounts" class="usage-accounts"></div>
+        <details class="source-catalog">
+          <summary>添加用量账户</summary>
+          <div class="form-row">
+            <label class="field"><span>名称</span><input id="usageName" class="input" placeholder="例如 米醋中转站"></label>
+            <label class="field narrow"><span>类型</span>
+              <select id="usageKind" class="input">
+                <option value="newapi">New API 中转站</option>
+                <option value="deepseek">DeepSeek</option>
+              </select>
+            </label>
+          </div>
+          <div id="usageNewapiFields">
+            <label class="field"><span>Base URL</span><input id="usageBaseUrl" class="input" placeholder="https://www.micuapi.ai"></label>
+            <div class="form-row">
+              <label class="field"><span>用户 ID</span><input id="usageUserId" class="input" placeholder="个人资料里的数字 ID"></label>
+              <label class="field"><span>Access Token</span><input id="usageAccessToken" class="input" type="password" placeholder="系统访问令牌，不是 sk- 模型 Key"></label>
+            </div>
+          </div>
+          <div id="usageDeepseekFields" class="hidden">
+            <label class="field"><span>API Key</span><input id="usageApiKey" class="input" type="password" placeholder="用于查询余额"></label>
+            <label class="field"><span>Platform userToken（可选）</span><input id="usagePlatformToken" class="input" type="password" placeholder="用于读取详细 Token 用量"></label>
+          </div>
+          <div class="form-row">
+            <button id="addUsageAccount" class="btn primary">添加账户</button>
+            <span id="usageHint" class="hint"></span>
+          </div>
+        </details>
+      </div>
     </section>
 
     <section id="view-wiki" class="view">
@@ -542,6 +590,7 @@
 <script src="/static/app.js?v=20261029-feed-replace"></script>
 </body>
 </html>
+
 
 
 
