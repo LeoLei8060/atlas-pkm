@@ -528,8 +528,9 @@ def create_app() -> FastAPI:
         provider = build_provider(name, item)
         try:
             models = await provider.list_models()
-        except ProviderError:
-            raise
+        except ProviderError as exc:
+            status = 502 if exc.status_code >= 500 else exc.status_code
+            raise HTTPException(status, exc.message) from exc
         except httpx.HTTPError as exc:
             raise HTTPException(502, f"无法连接模型接口：{exc}") from exc
         except Exception as exc:
