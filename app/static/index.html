@@ -309,6 +309,11 @@
             <span>Base URL</span>
             <input id="customProviderBase" class="input" placeholder="https://gateway.example.com/v1">
           </label>
+          <label class="field">
+            <span>User-Agent（可选）</span>
+            <input id="customProviderUA" class="input" placeholder="留空使用浏览器型 User-Agent">
+            <span class="hint">部分中转站要求 Claude/Codex/浏览器型 UA；被 403 拒绝时可在这里填写。</span>
+          </label>
           <div class="form-row">
             <div class="field model-picker">
               <span>模型名</span>
@@ -541,6 +546,7 @@
 <script src="/static/app.js?v=20261029-feed-replace"></script>
 </body>
 </html>
+
 
 
 

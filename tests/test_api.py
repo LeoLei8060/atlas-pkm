@@ -339,6 +339,21 @@ def test_source_groups_and_csdn_discovery(isolated):
         assert "example_user/rss/list" in draft["config"]["rss_url"]
 
 
+def test_model_list_connection_error_is_not_500(isolated):
+    app = create_app()
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/providers/models",
+            json={
+                "base_url": "http://127.0.0.1:1/v1",
+                "protocol": "openai-compatible",
+                "api_key": "test-key",
+            },
+        )
+        assert response.status_code == 502
+        assert "detail" in response.json()
+
+
 def test_github_favorite_appears_in_collections(isolated):
     app = create_app()
     with TestClient(app) as client:

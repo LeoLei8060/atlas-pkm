@@ -31,10 +31,10 @@ class OpenAIProvider(BaseProvider):
             "max_tokens": max_tokens,
             "stream": False,
         }
-        headers = {
+        headers = self.request_headers({
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
-        }
+        })
         async with self.http() as client:
             response = await client.post(
                 f"{self.base_url}/chat/completions", json=body, headers=headers
@@ -62,7 +62,7 @@ class OpenAIProvider(BaseProvider):
     async def list_models(self) -> list[str]:
         if not self.api_key:
             raise ProviderNotConfigured()
-        headers = {"Authorization": f"Bearer {self.api_key}"}
+        headers = self.request_headers({"Authorization": f"Bearer {self.api_key}"})
         async with self.http() as client:
             response = await client.get(f"{self.base_url}/models", headers=headers)
         if response.status_code >= 400:

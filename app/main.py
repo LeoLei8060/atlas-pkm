@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal
 
+import httpx
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -87,6 +88,7 @@ class CustomProviderCreate(BaseModel):
     base_url: str = Field(min_length=8, max_length=500)
     model: str = Field(min_length=1, max_length=160)
     api_key: str = Field(default="", max_length=4000)
+    user_agent: str = Field(default="", max_length=500)
 
 
 class EmbeddingUpdate(BaseModel):
@@ -140,6 +142,7 @@ class ListModelsRequest(BaseModel):
     api_key: str | None = None
     base_url: str | None = None
     protocol: Literal["openai-compatible", "anthropic-compatible"] | None = None
+    user_agent: str | None = None
 
 
 class RefreshRequest(BaseModel):
@@ -331,6 +334,7 @@ def create_app() -> FastAPI:
             "base_url": body.base_url.rstrip("/"),
             "model": body.model.strip(),
             "api_key": body.api_key,
+            "user_agent": body.user_agent.strip(),
         }
         save_config(config)
         return masked_config(config)
@@ -517,10 +521,22 @@ def create_app() -> FastAPI:
             item["base_url"] = body.base_url.strip().rstrip("/")
         if body.protocol:
             item["protocol"] = body.protocol
+        if body.user_agent is not None:
+            item["user_agent"] = body.user_agent.strip()
         if not item.get("base_url") and name == "custom":
             raise HTTPException(400, "第三方模型需要 Base URL")
         provider = build_provider(name, item)
-        models = await provider.list_models()
+        try:
+            models = await provider.list_models()
+        except ProviderError:
+            raise
+        except httpx.HTTPError as exc:
+            raise HTTPException(502, f"无法连接模型接口：{exc}") from exc
+        except Exception as exc:
+            raise HTTPException(
+                502,
+                f"获取模型列表失败：{type(exc).__name__}: {exc}",
+            ) from exc
         return {
             "provider": name,
             "base_url": provider.base_url,

@@ -1077,6 +1077,10 @@ function modelCard(name, item, active) {
           <label class="field model-base-field">
             <span>Base URL</span>
             <input class="input" data-field="base_url" value="${esc(item.base_url || '')}">
+          </label>
+          <label class="field model-base-field">
+            <span>User-Agent（可选）</span>
+            <input class="input" data-field="user_agent" value="${esc(item.user_agent || '')}" placeholder="留空使用浏览器型 User-Agent">
           </label>` : ''}
       </div>
     </div>`;
@@ -1252,6 +1256,8 @@ function gatherSettings() {
     provider.model = card.querySelector('[data-field=model]').value.trim();
     const baseUrl = card.querySelector('[data-field=base_url]');
     if (baseUrl) provider.base_url = baseUrl.value.trim();
+    const userAgent = card.querySelector('[data-field=user_agent]');
+    if (userAgent) provider.user_agent = userAgent.value.trim();
     providers[name] = provider;
   });
   return {
@@ -1345,10 +1351,12 @@ async function fetchModels(button) {
   let apiKey = '';
   let baseUrl = '';
   let protocol = null;
+  let userAgent = '';
   if (card) {
     apiKey = card.querySelector('[data-field=api_key]')?.value.trim() || '';
     baseUrl = card.querySelector('[data-field=base_url]')?.value.trim() || '';
     protocol = card.querySelector('[data-field=protocol]')?.value || null;
+    userAgent = card.querySelector('[data-field=user_agent]')?.value.trim() || '';
   } else if (button.id === 'fetchOfficialModels') {
     provider = $('#officialVendor').value;
     apiKey = $('#officialKey').value.trim();
@@ -1356,6 +1364,7 @@ async function fetchModels(button) {
     apiKey = $('#customProviderKey').value.trim();
     baseUrl = $('#customProviderBase').value.trim();
     protocol = $('#customProviderProtocol').value;
+    userAgent = $('#customProviderUA').value.trim();
   }
   if (!provider && !baseUrl) {
     toast('先填写 Base URL', 'error');
@@ -1370,6 +1379,7 @@ async function fetchModels(button) {
         api_key: apiKey || null,
         base_url: baseUrl || null,
         protocol,
+        user_agent: userAgent || null,
       }),
     });
     const models = result.models || [];
@@ -1455,6 +1465,7 @@ async function addCustomProvider() {
     base_url: $('#customProviderBase').value.trim(),
     model: $('#customProviderModel').value.trim(),
     api_key: $('#customProviderKey').value.trim(),
+    user_agent: $('#customProviderUA').value.trim(),
   };
   if (!payload.id || !payload.label || !payload.base_url || !payload.model) {
     toast('请填写标识、显示名称、Base URL 和模型名', 'error');
@@ -1471,6 +1482,7 @@ async function addCustomProvider() {
     $('#customProviderBase').value = '';
     $('#customProviderModel').value = '';
     $('#customProviderKey').value = '';
+    $('#customProviderUA').value = '';
     $('#customProviderHint').textContent = '';
     state.addModelKind = 'third-party';
     renderChrome();

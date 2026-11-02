@@ -28,6 +28,13 @@ class ChatResult:
     usage: dict[str, Any] | None = None
 
 
+DEFAULT_THIRD_PARTY_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/131.0.0.0 Safari/537.36"
+)
+
+
 class BaseProvider:
     name = "base"
     default_base_url = ""
@@ -41,7 +48,14 @@ class BaseProvider:
         self.api_key = str(self.config.get("api_key") or "").strip()
         self.model = str(self.config.get("model") or "").strip()
         self.base_url = str(self.config.get("base_url") or self.default_base_url).rstrip("/")
+        self.user_agent = str(self.config.get("user_agent") or "").strip()
         self._client = client
+
+    def request_headers(self, extra: dict[str, str] | None = None) -> dict[str, str]:
+        headers = dict(extra or {})
+        if self.user_agent:
+            headers["User-Agent"] = self.user_agent
+        return headers
 
     @property
     def configured(self) -> bool:
