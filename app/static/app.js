@@ -1040,6 +1040,7 @@ function modelCard(name, item, active) {
         <div class="model-card-actions">
           <span class="provider-tag">${thirdParty ? '第三方' : '官方'}</span>
           <span class="status-pill ${item.has_key ? 'ok' : ''}">${status}</span>
+          <button class="btn ghost small" data-save-model="${esc(name)}">保存</button>
           <button class="btn danger small" data-remove-model="${esc(name)}" data-model-kind="${thirdParty ? 'third_party' : 'official'}">移除</button>
         </div>
       </div>
@@ -1051,6 +1052,7 @@ function modelCard(name, item, active) {
         <label class="field">
           <span>API Key</span>
           <input class="input" type="password" data-field="api_key" placeholder="${item.has_key ? '已保存，留空保持不变' : '粘贴 API Key'}">
+          <span class="hint">修改后点本卡片“保存”，或直接点“测试当前模型”。</span>
         </label>
         <div class="field model-picker">
           <span>模型名</span>
@@ -1332,9 +1334,13 @@ async function applyProfileSuggestions() {
 async function fetchModels(button) {
   const picker = button.closest('.model-picker');
   if (!picker) return;
-  const input = picker.querySelector('input[data-field=model]');
-  const select = picker.querySelector('[data-model-select]');
+  const input = picker.querySelector('input[data-field=model]') || picker.querySelector('input');
+  const select = picker.querySelector('[data-model-select]') || picker.querySelector('select');
   const card = button.closest('.model-card');
+  if (!input || !select) {
+    toast('模型选择器未加载，请关闭后重新打开添加模型面板', 'error');
+    return;
+  }
   let provider = button.dataset.fetchModelList || null;
   let apiKey = '';
   let baseUrl = '';
@@ -2343,9 +2349,20 @@ function bindEvents() {
   $('#addOfficialProvider').addEventListener('click', addOfficialProvider);
   $('#fetchOfficialModels').addEventListener('click', event => fetchModels(event.currentTarget));
   $('#fetchCustomModels').addEventListener('click', event => fetchModels(event.currentTarget));
-  $('#configuredModelList').addEventListener('click', event => {
-    const button = event.target.closest('[data-fetch-model-list]');
-    if (button) fetchModels(button);
+  $('#configuredModelList').addEventListener('click', async event => {
+    const fetchButton = event.target.closest('[data-fetch-model-list]');
+    if (fetchButton) {
+      fetchModels(fetchButton);
+      return;
+    }
+    const saveButton = event.target.closest('[data-save-model]');
+    if (!saveButton) return;
+    busy(saveButton, true);
+    try {
+      if (await saveSettings(true)) toast('模型配置已保存');
+    } finally {
+      busy(saveButton, false);
+    }
   });
   $('#toggleAddModel').addEventListener('click', () => {
     const panel = $('#addModelPanel');
