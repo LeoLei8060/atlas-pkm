@@ -1005,42 +1005,6 @@ async function addUsageAccount() {
   }
 }
 
-async function loginUsageAccount() {
-  const button = $('#loginUsageAccount');
-  const kind = $('#usageKind').value;
-  const payload = {
-    name: $('#usageName').value.trim(),
-    kind,
-    base_url: $('#usageBaseUrl').value.trim(),
-  };
-  if (!payload.name) {
-    toast('先填写账户名称', 'error');
-    return;
-  }
-  if (kind === 'newapi' && !payload.base_url) {
-    toast('New API 登录需要 Base URL', 'error');
-    return;
-  }
-  busy(button, true);
-  $('#usageHint').textContent = '请在登录窗口完成平台登录，然后点击“完成绑定”。';
-  try {
-    await api('/api/usage/login', { method: 'POST', body: JSON.stringify(payload) });
-    toast('账户绑定成功');
-    $('#usageName').value = '';
-    $('#usageBaseUrl').value = '';
-    $('#usageUserId').value = '';
-    $('#usageAccessToken').value = '';
-    $('#usageApiKey').value = '';
-    $('#usagePlatformToken').value = '';
-    await loadUsage(true);
-  } catch (error) {
-    $('#usageHint').textContent = error.message;
-    toast(error.message, 'error');
-  } finally {
-    busy(button, false);
-  }
-}
-
 async function deleteUsageAccount(accountId) {
   if (!confirm('删除该用量账户？')) return;
   try {
@@ -2619,7 +2583,6 @@ function bindEvents() {
   $('#refreshCollections').addEventListener('click', loadCollections);
   $('#refreshUsage').addEventListener('click', () => loadUsage(true));
   $('#addUsageAccount').addEventListener('click', addUsageAccount);
-  $('#loginUsageAccount').addEventListener('click', loginUsageAccount);
   $('#usageKind').addEventListener('change', () => {
     const deepseek = $('#usageKind').value === 'deepseek';
     $('#usageNewapiFields').classList.toggle('hidden', deepseek);

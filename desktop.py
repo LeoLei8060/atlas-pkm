@@ -250,11 +250,6 @@ def _setup_streams() -> Path | None:
 
 def main() -> None:
     global PORT, URL
-    if "--usage-login" in sys.argv:
-        from app.usage_login import run as run_usage_login
-
-        index = sys.argv.index("--usage-login")
-        raise SystemExit(run_usage_login(sys.argv[index + 1:]))
     _setup_streams()
     # Create data/ and vault/ next to the executable before the UI opens.
     from app.config import settings

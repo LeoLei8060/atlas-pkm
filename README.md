@@ -11,7 +11,7 @@ Atlas PKM 是一个面向个人使用者的桌面应用。资讯、索引、模�
 
 当前版本：`0.1.0`  
 桌面端：Windows 10/11（WebView2）  
-测试：88 项自动化测试通过
+测试：84 项自动化测试通过
 
 ---
 
@@ -173,12 +173,10 @@ _system
   - 今日 Token 和请求数
   - 近 30 天 Token
   - 按模型统计
-- 支持“登录并绑定”：在独立窗口打开平台官方登录页，不收集平台密码。
-- 登录后自动读取用户 ID、Access Token 或 Platform userToken。
 - 用量账户令牌使用 Windows DPAPI 加密保存，API 响应只返回是否已配置。
 - 外部用量结果缓存 5 分钟，避免频繁请求平台。
 
-> 手动模式仍可填写 Access Token + 数字用户 ID（New API）或 API Key / Platform Token（DeepSeek）；登录绑定是更推荐的方式。
+> 绑定方式：New API 使用平台个人资料中的 **Access Token + 数字用户 ID**；DeepSeek 使用 **API Key**（余额）和可选的 **Platform userToken**（详细 Token）。
 
 ### 10. 桌面体验
 
@@ -842,6 +840,7 @@ pkm-app/
 ## License
 
 当前仓库尚未包含 `LICENSE` 文件。正式开源发布前需要选择并添加许可证；在添加之前，不应默认视为 MIT 或其他开源许可。
+
 
 
 
