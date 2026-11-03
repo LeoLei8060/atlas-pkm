@@ -2,7 +2,14 @@ from __future__ import annotations
 
 import json
 
-from app.usage_login import _extract_deepseek, _extract_newapi, _login_url
+from http.cookies import SimpleCookie
+
+from app.usage_login import (
+    _extract_deepseek,
+    _extract_newapi,
+    _login_url,
+    _serialize_cookies,
+)
 
 
 class FakeWindow:
@@ -27,6 +34,15 @@ def test_extract_newapi_credentials():
 def test_extract_deepseek_token():
     window = FakeWindow({"values": {"userToken": "platform-token"}})
     assert _extract_deepseek(window) == {"platform_token": "platform-token"}
+
+
+def test_serialize_pywebview_simple_cookies():
+    cookie = SimpleCookie()
+    cookie["session"] = "abc123"
+    assert _serialize_cookies([cookie]) == [{"name": "session", "value": "abc123"}]
+    assert _serialize_cookies([{"name": "uid", "value": "42"}]) == [
+        {"name": "uid", "value": "42"}
+    ]
 
 
 def test_login_urls_strip_v1_for_newapi():

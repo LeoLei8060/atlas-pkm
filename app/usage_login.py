@@ -83,6 +83,29 @@ def _extract_deepseek(window: Any) -> dict[str, Any]:
     return {"platform_token": token}
 
 
+def _serialize_cookies(cookies: Any) -> list[dict[str, str]]:
+    """pywebview returns a list of SimpleCookie objects on Windows."""
+    result: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for item in cookies or []:
+        if isinstance(item, dict) and item.get("name"):
+            name = str(item.get("name") or "")
+            value = str(item.get("value") or "")
+            if name and name not in seen:
+                seen.add(name)
+                result.append({"name": name, "value": value})
+            continue
+        items = getattr(item, "items", None)
+        if callable(items):
+            for name, morsel in items():
+                name = str(name)
+                value = str(getattr(morsel, "value", morsel))
+                if name and name not in seen:
+                    seen.add(name)
+                    result.append({"name": name, "value": value})
+    return result
+
+
 def _write_result(output: Path, payload: dict[str, Any]) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_suffix(output.suffix + ".tmp")
@@ -137,12 +160,7 @@ def run(argv: list[str]) -> int:
                 data = _extract_deepseek(window)
             else:
                 data = _extract_newapi(window)
-            cookies = window.get_cookies() or []
-            data["session_cookies"] = [
-                {"name": item.get("name"), "value": item.get("value")}
-                for item in cookies
-                if isinstance(item, dict) and item.get("name")
-            ]
+            data["session_cookies"] = _serialize_cookies(window.get_cookies())
             data["ok"] = True
             _write_result(output, data)
         except Exception as exc:
