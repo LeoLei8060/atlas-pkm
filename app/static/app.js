@@ -1000,8 +1000,8 @@ function renderUsage() {
         <div class="usage-note">账号总计（所有 API Key）</div>
         <div class="usage-stat"><span>余额</span><strong>${usageMoney(balance.remaining, balance.currency || '¥')}</strong></div>
         ${balance.used !== undefined ? `<div class="usage-stat"><span>累计已用</span><strong>${usageMoney(balance.used, balance.currency || '¥')}</strong></div>` : ''}
-        <div class="usage-stat"><span>今日 Token</span><strong>${fmtCount(today.tokens || 0)}</strong></div>
-        <div class="usage-stat"><span>今日请求</span><strong>${fmtCount(today.requests || 0)}</strong></div>
+        <div class="usage-stat"><span>${esc(today.label || '今日 Token')}</span><strong>${fmtCount(today.tokens || 0)}</strong></div>
+        <div class="usage-stat"><span>${esc(today.label ? today.label.replace(' Token', '请求') : '今日请求')}</span><strong>${fmtCount(today.requests || 0)}</strong></div>
         <div class="usage-stat"><span>${esc(period.label || `近 ${period.days || 30} 天`)} Token</span><strong>${fmtCount(period.tokens || 0)}</strong></div>
         ${period.prompt_tokens || period.completion_tokens ? `<div class="usage-note">输入 ${fmtCount(period.prompt_tokens || 0)} · 输出 ${fmtCount(period.completion_tokens || 0)}${period.cached_tokens ? ` · 缓存命中 ${fmtCount(period.cached_tokens)}` : ''}</div>` : ''}
         ${models ? `<div class="usage-note">按模型</div>${models}` : ''}

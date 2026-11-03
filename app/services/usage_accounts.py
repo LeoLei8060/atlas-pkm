@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import re
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
@@ -164,54 +164,74 @@ def _normalize_newapi(
     }
 
 
+def _usage_values(items: Any) -> dict[str, int]:
+    values = {"tokens": 0, "requests": 0, "prompt_tokens": 0, "completion_tokens": 0, "cached_tokens": 0}
+    for item in items or []:
+        if not isinstance(item, dict):
+            continue
+        value = int(_number(item.get("amount") or item.get("value") or item.get("count")))
+        kind = str(item.get("type") or item.get("usage_type") or item.get("name") or "").upper()
+        if kind == "REQUEST" or "REQUEST" in kind:
+            values["requests"] += value
+            continue
+        values["tokens"] += value
+        if "CACHE_HIT" in kind:
+            values["cached_tokens"] += value
+            values["prompt_tokens"] += value
+        elif "PROMPT" in kind:
+            values["prompt_tokens"] += value
+        elif "RESPONSE" in kind or "COMPLETION" in kind:
+            values["completion_tokens"] += value
+    return values
+
+
+def _bucket_date(value: Any) -> str:
+    if isinstance(value, (int, float)) or (isinstance(value, str) and value.isdigit()):
+        number = float(value)
+        if number > 1e12:
+            number /= 1000
+        return datetime.fromtimestamp(number, timezone.utc).date().isoformat()
+    text = str(value or "")
+    if len(text) >= 10 and text[4:5] == "-":
+        return text[:10]
+    return ""
+
+
 def _deepseek_usage_rows(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]], str]:
     data = payload.get("data") or {}
     biz = data.get("biz_data") or {}
-    days = biz.get("days") if isinstance(biz, dict) else None
-    totals = biz.get("total") if isinstance(biz, dict) else None
     rows: list[dict[str, Any]] = []
-    for day in days or []:
-        if not isinstance(day, dict):
-            continue
-        date = str(day.get("date") or "")[:10]
-        for model in day.get("data") or []:
-            if not isinstance(model, dict):
+    series = biz.get("series") if isinstance(biz, dict) else None
+    if isinstance(series, list):
+        for item in series:
+            if not isinstance(item, dict):
                 continue
-            name = str(model.get("model") or "未知模型")
-            tokens = 0
-            requests = 0
-            prompt_tokens = 0
-            completion_tokens = 0
-            cached_tokens = 0
-            for item in model.get("usage") or []:
-                if not isinstance(item, dict):
+            model = str(item.get("model") or item.get("model_name") or "未知模型")
+            for bucket in item.get("buckets") or item.get("bucket") or []:
+                if not isinstance(bucket, dict):
                     continue
-                value = int(_number(item.get("amount")))
-                kind = str(item.get("type") or "").upper()
-                if kind == "REQUEST":
-                    requests += value
-                else:
-                    tokens += value
-                    if "CACHE_HIT" in kind:
-                        cached_tokens += value
-                        prompt_tokens += value
-                    elif "PROMPT" in kind:
-                        prompt_tokens += value
-                    elif "RESPONSE" in kind or "COMPLETION" in kind:
-                        completion_tokens += value
-            if tokens or requests:
-                rows.append(
-                    {
-                        "date": date,
-                        "model": name,
-                        "tokens": tokens,
-                        "requests": requests,
-                        "prompt_tokens": prompt_tokens,
-                        "completion_tokens": completion_tokens,
-                        "cached_tokens": cached_tokens,
-                    }
+                date = _bucket_date(
+                    bucket.get("time") or bucket.get("date") or bucket.get("day") or bucket.get("timestamp")
                 )
-    return rows, list(totals or []), str(payload.get("currency") or "CNY")
+                if not date:
+                    continue
+                values = _usage_values(bucket.get("usage") or bucket.get("usages") or [])
+                if values["tokens"] or values["requests"]:
+                    rows.append({"date": date, "model": model, **values})
+    else:
+        days = biz.get("days") if isinstance(biz, dict) else None
+        for day in days or []:
+            if not isinstance(day, dict):
+                continue
+            date = str(day.get("date") or "")[:10]
+            for model in day.get("data") or []:
+                if not isinstance(model, dict):
+                    continue
+                name = str(model.get("model") or "未知模型")
+                values = _usage_values(model.get("usage") or [])
+                if values["tokens"] or values["requests"]:
+                    rows.append({"date": date, "model": name, **values})
+    return rows, list(biz.get("total") or []), str(payload.get("currency") or "CNY")
 
 
 def _normalize_deepseek(
@@ -229,7 +249,14 @@ def _normalize_deepseek(
             "topped_up": _number(info.get("topped_up_balance")),
             "currency": "¥" if currency == "CNY" else "$",
         },
-        "today": {"tokens": 0, "requests": 0, "prompt_tokens": 0, "completion_tokens": 0, "cached_tokens": 0},
+        "today": {
+            "tokens": 0,
+            "requests": 0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "cached_tokens": 0,
+            "label": "今日（UTC）",
+        },
         "period": {
             "days": 30,
             "tokens": 0,
@@ -237,7 +264,7 @@ def _normalize_deepseek(
             "prompt_tokens": 0,
             "completion_tokens": 0,
             "cached_tokens": 0,
-            "label": "本月",
+            "label": "近 30 天",
         },
         "models": [],
         "daily": [],
@@ -247,7 +274,7 @@ def _normalize_deepseek(
         result["note"] = "DeepSeek API Key 只能查询余额；详细 Token 需要填写 Platform userToken。"
         return result
     rows, totals, _ = _deepseek_usage_rows(usage_payload)
-    today = datetime.now().date().isoformat()
+    today = datetime.now(timezone.utc).date().isoformat()
     models: dict[str, dict[str, Any]] = {}
     daily: dict[str, dict[str, Any]] = {}
     for row in rows:
@@ -486,16 +513,19 @@ async def _fetch_deepseek(account: dict[str, Any]) -> dict[str, Any]:
         usage_error = ""
         if platform_token or _cookie_header(account):
             try:
-                now = datetime.now()
+                end = int(time.time())
+                start = end - 30 * 86400
                 headers = _headers(account)
                 amount = await _get_json(
                     client,
-                    f"{DEEPSEEK_USAGE.format(kind='amount')}?month={now.month}&year={now.year}",
+                    "https://platform.deepseek.com/api/v0/usage/by_api_key/amount"
+                    f"?start={start}&end={end}&tz=0",
                     headers,
                 )
                 cost = await _get_json(
                     client,
-                    f"{DEEPSEEK_USAGE.format(kind='cost')}?month={now.month}&year={now.year}",
+                    "https://platform.deepseek.com/api/v0/usage/by_api_key/cost"
+                    f"?start={start}&end={end}&tz=0",
                     headers,
                 )
                 biz_cost = (cost.get("data") or {}).get("biz_data")

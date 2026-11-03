@@ -62,6 +62,46 @@ def test_newapi_usage_normalization():
     assert result["models"][0]["model"] == "deepseek-flash"
 
 
+def test_deepseek_by_api_key_series_parser():
+    from datetime import datetime, timezone
+
+    today = datetime.now(timezone.utc).date().isoformat()
+    balance = {
+        "is_available": True,
+        "balance_infos": [
+            {"currency": "CNY", "total_balance": "10", "granted_balance": "0", "topped_up_balance": "10"}
+        ],
+    }
+    usage = {
+        "data": {
+            "biz_data": {
+                "series": [
+                    {
+                        "model": "deepseek-chat",
+                        "buckets": [
+                            {
+                                "time": f"{today}T00:00:00Z",
+                                "usage": [
+                                    {"type": "PROMPT_CACHE_HIT_TOKEN", "amount": "10"},
+                                    {"type": "PROMPT_CACHE_MISS_TOKEN", "amount": "20"},
+                                    {"type": "RESPONSE_TOKEN", "amount": "5"},
+                                    {"type": "REQUEST", "amount": "2"},
+                                ],
+                            }
+                        ],
+                    }
+                ]
+            }
+        }
+    }
+    result = _normalize_deepseek({"name": "deepseek"}, balance, usage)
+    assert result["period"]["tokens"] == 35
+    assert result["today"]["tokens"] == 35
+    assert result["today"]["requests"] == 2
+    assert result["period"]["cached_tokens"] == 10
+    assert result["models"][0]["model"] == "deepseek-chat"
+
+
 def test_deepseek_by_key_usage_parser():
     payload = {
         "data": {
