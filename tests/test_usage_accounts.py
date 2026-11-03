@@ -119,6 +119,46 @@ def test_deepseek_platform_summary_balance():
     assert result["balance"]["granted"] == 1.5
 
 
+def test_deepseek_cost_totals():
+    from datetime import datetime
+
+    today = datetime.now().date().isoformat()
+    usage = {
+        "data": {
+            "biz_data": {
+                "total": [],
+                "days": [
+                    {
+                        "date": today,
+                        "data": [
+                            {
+                                "model": "deepseek-chat",
+                                "usage": [{"type": "RESPONSE_TOKEN", "amount": "10"}],
+                            }
+                        ],
+                    }
+                ],
+            }
+        },
+        "cost_data": [
+            {
+                "currency": "CNY",
+                "total": [{"usage": [{"type": "RESPONSE_TOKEN", "amount": "1.25"}]}],
+                "days": [
+                    {
+                        "date": today,
+                        "data": [{"usage": [{"type": "RESPONSE_TOKEN", "amount": "1.25"}]}],
+                    }
+                ],
+            }
+        ],
+    }
+    result = _normalize_deepseek({"name": "deepseek"}, {}, usage)
+    assert result["today"]["tokens"] == 10
+    assert result["today"]["cost"] == 1.25
+    assert result["period"]["cost"] == 1.25
+
+
 def test_deepseek_by_key_usage_parser():
     payload = {
         "data": {

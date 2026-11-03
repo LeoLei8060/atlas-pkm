@@ -308,6 +308,7 @@ def _normalize_deepseek(
             "prompt_tokens": 0,
             "completion_tokens": 0,
             "cached_tokens": 0,
+            "cost": 0.0,
             "label": "今日",
         },
         "period": {
@@ -317,6 +318,7 @@ def _normalize_deepseek(
             "prompt_tokens": 0,
             "completion_tokens": 0,
             "cached_tokens": 0,
+            "cost": 0.0,
             "label": "本月",
         },
         "models": [],
@@ -327,7 +329,10 @@ def _normalize_deepseek(
         result["note"] = "DeepSeek API Key 只能查询余额；详细 Token 需要填写 Platform userToken。"
         return result
     rows, totals, _ = _deepseek_usage_rows(usage_payload)
+    cost_by_day, total_cost, _ = _deepseek_cost_by_day(usage_payload.get("cost_data"))
     today = datetime.now().date().isoformat()
+    result["period"]["cost"] = total_cost
+    result["today"]["cost"] = round(cost_by_day.get(today, 0.0), 4)
     models: dict[str, dict[str, Any]] = {}
     daily: dict[str, dict[str, Any]] = {}
     for row in rows:
@@ -337,7 +342,7 @@ def _normalize_deepseek(
         )
         day = daily.setdefault(
             row["date"],
-            {"date": row["date"], "tokens": 0, "requests": 0, "prompt_tokens": 0, "completion_tokens": 0, "cached_tokens": 0},
+            {"date": row["date"], "tokens": 0, "requests": 0, "prompt_tokens": 0, "completion_tokens": 0, "cached_tokens": 0, "cost": 0.0},
         )
         for metric in ("prompt_tokens", "completion_tokens", "cached_tokens"):
             model[metric] += row.get(metric, 0)
@@ -346,6 +351,7 @@ def _normalize_deepseek(
         model["requests"] += row["requests"]
         day["tokens"] += row["tokens"]
         day["requests"] += row["requests"]
+        day["cost"] = round(cost_by_day.get(row["date"], 0.0), 4)
         for metric in ("prompt_tokens", "completion_tokens", "cached_tokens"):
             result["period"][metric] += row.get(metric, 0)
         result["period"]["tokens"] += row["tokens"]
@@ -525,6 +531,37 @@ def _deepseek_by_key_rows(payload: Any) -> list[dict[str, Any]]:
     return found
 
 
+def _deepseek_cost_by_day(cost_data: Any) -> tuple[dict[str, float], float, str]:
+    blocks = cost_data if isinstance(cost_data, list) else []
+    by_day: dict[str, float] = {}
+    total = 0.0
+    currency = "CNY"
+    for block in blocks:
+        if not isinstance(block, dict):
+            continue
+        currency = str(block.get("currency") or currency)
+        for day in block.get("days") or []:
+            if not isinstance(day, dict):
+                continue
+            date = str(day.get("date") or "")[:10]
+            amount = 0.0
+            for model in day.get("data") or []:
+                if not isinstance(model, dict):
+                    continue
+                for item in model.get("usage") or []:
+                    if isinstance(item, dict):
+                        amount += _number(item.get("amount"))
+            if date:
+                by_day[date] = by_day.get(date, 0) + amount
+        for model in block.get("total") or []:
+            if not isinstance(model, dict):
+                continue
+            for item in model.get("usage") or []:
+                if isinstance(item, dict):
+                    total += _number(item.get("amount"))
+    return by_day, round(total, 4), currency
+
+
 def _deepseek_keys_from_payload(payload: Any) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for block in _deepseek_by_key_rows(payload):
@@ -601,7 +638,7 @@ async def _fetch_deepseek(account: dict[str, Any]) -> dict[str, Any]:
                     if isinstance(biz_cost, list) and biz_cost
                     else "CNY"
                 )
-                usage_payload = {**amount, "currency": currency}
+                usage_payload = {**amount, "currency": currency, "cost_data": biz_cost}
             except Exception as exc:
                 usage_error = str(exc)[:240]
     result = _normalize_deepseek(account, balance_payload, usage_payload, summary_payload)

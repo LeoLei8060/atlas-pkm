@@ -999,8 +999,8 @@ function renderUsage() {
       const dailyBlock = daily.length ? `<details class="usage-keys">
         <summary>每日用量（${daily.length} 天）</summary>
         <div class="usage-table-wrap"><table class="usage-key-table">
-          <thead><tr><th>日期</th><th>Token</th><th>请求</th></tr></thead>
-          <tbody>${daily.map(day => `<tr><td>${esc(day.date)}</td><td>${fmtCount(day.tokens || 0)}</td><td>${fmtCount(day.requests || 0)}</td></tr>`).join('')}</tbody>
+          <thead><tr><th>日期</th><th>Token</th><th>请求</th><th>消费</th></tr></thead>
+          <tbody>${daily.map(day => `<tr><td>${esc(day.date)}</td><td>${fmtCount(day.tokens || 0)}</td><td>${fmtCount(day.requests || 0)}</td><td>${day.cost !== undefined ? usageMoney(day.cost, balance.currency || '¥') : '—'}</td></tr>`).join('')}</tbody>
         </table></div>
       </details>` : '';
       return `<div class="usage-card">
@@ -1008,9 +1008,11 @@ function renderUsage() {
         <div class="usage-note">账号总计（所有 API Key）</div>
         <div class="usage-stat"><span>余额</span><strong>${usageMoney(balance.remaining, balance.currency || '¥')}</strong></div>
         ${balance.used !== undefined ? `<div class="usage-stat"><span>累计已用</span><strong>${usageMoney(balance.used, balance.currency || '¥')}</strong></div>` : ''}
-        <div class="usage-stat"><span>${esc(today.label || '今日 Token')}</span><strong>${fmtCount(today.tokens || 0)}</strong></div>
-        <div class="usage-stat"><span>${esc(today.label ? today.label.replace(' Token', '请求') : '今日请求')}</span><strong>${fmtCount(today.requests || 0)}</strong></div>
+        <div class="usage-stat"><span>今日 Token</span><strong>${fmtCount(today.tokens || 0)}</strong></div>
+        <div class="usage-stat"><span>今日请求</span><strong>${fmtCount(today.requests || 0)}</strong></div>
+        ${today.cost !== undefined ? `<div class="usage-stat"><span>今日消费</span><strong>${usageMoney(today.cost, balance.currency || '¥')}</strong></div>` : ''}
         <div class="usage-stat"><span>${esc(period.label || `近 ${period.days || 30} 天`)} Token</span><strong>${fmtCount(period.tokens || 0)}</strong></div>
+        ${period.cost !== undefined ? `<div class="usage-stat"><span>${esc(period.label || '期间')}消费</span><strong>${usageMoney(period.cost, balance.currency || '¥')}</strong></div>` : ''}
         ${period.prompt_tokens || period.completion_tokens ? `<div class="usage-note">输入 ${fmtCount(period.prompt_tokens || 0)} · 输出 ${fmtCount(period.completion_tokens || 0)}${period.cached_tokens ? ` · 缓存命中 ${fmtCount(period.cached_tokens)}` : ''}</div>` : ''}
         ${models ? `<div class="usage-note">按模型</div>${models}` : ''}
         ${dailyBlock}
