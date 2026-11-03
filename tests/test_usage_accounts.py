@@ -5,7 +5,11 @@ import os
 from fastapi.testclient import TestClient
 
 from app.main import create_app
-from app.services.usage_accounts import _normalize_deepseek, _normalize_newapi
+from app.services.usage_accounts import (
+    _deepseek_keys_from_payload,
+    _normalize_deepseek,
+    _normalize_newapi,
+)
 
 
 def test_usage_account_is_masked_and_deletable(isolated):
@@ -56,6 +60,27 @@ def test_newapi_usage_normalization():
     assert result["balance"]["remaining"] == 0.5
     assert result["balance"]["used"] == 3.0
     assert result["models"][0]["model"] == "deepseek-flash"
+
+
+def test_deepseek_by_key_usage_parser():
+    payload = {
+        "data": {
+            "biz_data": [
+                {
+                    "api_key_name": "default",
+                    "usage": [
+                        {"type": "PROMPT_CACHE_MISS_TOKEN", "amount": "100"},
+                        {"type": "RESPONSE_TOKEN", "amount": "50"},
+                        {"type": "REQUEST", "amount": "2"},
+                    ],
+                }
+            ]
+        }
+    }
+    keys = _deepseek_keys_from_payload(payload)
+    assert keys[0]["name"] == "default"
+    assert keys[0]["period_tokens"] == 150
+    assert keys[0]["requests"] == 2
 
 
 def test_deepseek_usage_normalization():

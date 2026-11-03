@@ -248,6 +248,97 @@ async def _get_json(client: httpx.AsyncClient, url: str, headers: dict[str, str]
     return data if isinstance(data, dict) else {}
 
 
+def _newapi_token_rows(payload: Any) -> list[dict[str, Any]]:
+    data = payload.get("data") if isinstance(payload, dict) else payload
+    if isinstance(data, dict):
+        data = data.get("items") or data.get("data") or []
+    return [item for item in data or [] if isinstance(item, dict)] if isinstance(data, list) else []
+
+
+def _newapi_log_rows(payload: Any) -> list[dict[str, Any]]:
+    data = payload.get("data") if isinstance(payload, dict) else payload
+    if isinstance(data, dict):
+        data = data.get("items") or data.get("data") or []
+    return [item for item in data or [] if isinstance(item, dict)] if isinstance(data, list) else []
+
+
+def _newapi_status_label(status: Any) -> str:
+    return {1: "启用", 2: "禁用", 3: "过期", 4: "耗尽"}.get(int(_number(status)), "未知")
+
+
+async def _fetch_newapi_keys(
+    client: httpx.AsyncClient,
+    base: str,
+    headers: dict[str, str],
+    qpu: float,
+    start_ts: int,
+    end_ts: int,
+) -> list[dict[str, Any]]:
+    tokens: list[dict[str, Any]] = []
+    for page in range(1, 6):
+        payload = await _get_json(client, f"{base}/api/token/?p={page}&size=100", headers)
+        rows = _newapi_token_rows(payload)
+        tokens.extend(rows)
+        if len(rows) < 100:
+            break
+
+    logs: list[dict[str, Any]] = []
+    for page in range(1, 21):
+        payload = await _get_json(
+            client,
+            f"{base}/api/log/self?p={page}&page_size=100&type=2&start_timestamp={start_ts}&end_timestamp={end_ts}",
+            headers,
+        )
+        rows = _newapi_log_rows(payload)
+        logs.extend(rows)
+        if len(rows) < 100:
+            break
+
+    usage: dict[str, dict[str, Any]] = {}
+    for row in logs:
+        name = str(row.get("token_name") or row.get("tokenName") or "未命名 Key")
+        item = usage.setdefault(
+            name,
+            {
+                "name": name,
+                "tokens": 0,
+                "today_tokens": 0,
+                "requests": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "quota": 0,
+            },
+        )
+        tokens_used = int(_number(row.get("prompt_tokens"))) + int(_number(row.get("completion_tokens")))
+        item["tokens"] += tokens_used
+        if _day(row.get("created_at")) == datetime.now().date().isoformat():
+            item["today_tokens"] += tokens_used
+        item["prompt_tokens"] += int(_number(row.get("prompt_tokens")))
+        item["completion_tokens"] += int(_number(row.get("completion_tokens")))
+        item["requests"] += 1
+        item["quota"] += _number(row.get("quota"))
+
+    result = []
+    for token in tokens:
+        name = str(token.get("name") or "未命名 Key")
+        row = usage.get(name, {})
+        result.append(
+            {
+                "name": name,
+                "status": _newapi_status_label(token.get("status")),
+                "used": _money(token.get("used_quota"), qpu),
+                "remaining": None if token.get("unlimited_quota") else _money(token.get("remain_quota"), qpu),
+                "today_tokens": int(row.get("today_tokens", 0)),
+                "period_tokens": int(row.get("tokens", 0)),
+                "prompt_tokens": int(row.get("prompt_tokens", 0)),
+                "completion_tokens": int(row.get("completion_tokens", 0)),
+                "requests": int(row.get("requests", 0)),
+                "cost": round(_number(row.get("quota")) / qpu, 4),
+            }
+        )
+    return result
+
+
 async def _fetch_newapi(account: dict[str, Any]) -> dict[str, Any]:
     base = str(account.get("base_url") or "").rstrip("/")
     if not base:
@@ -274,7 +365,86 @@ async def _fetch_newapi(account: dict[str, Any]) -> dict[str, Any]:
             headers,
         )
         rows = _newapi_rows(data_payload.get("data"))
-    return _normalize_newapi(account, status, user, today_stat, rows)
+        qpu = _number(status.get("quota_per_unit")) or 500000.0
+        keys: list[dict[str, Any]] = []
+        keys_note = "按 API Key 的累计额度来自令牌列表；区间 Token/请求数来自请求日志。"
+        try:
+            keys = await _fetch_newapi_keys(
+                client, base, headers, qpu, int(month_start), end_ts
+            )
+        except Exception as exc:
+            keys_note = f"账号用量正常；按 API Key 明细读取失败：{str(exc)[:180]}"
+    result = _normalize_newapi(account, status, user, today_stat, rows)
+    result["keys"] = keys
+    result["keys_note"] = keys_note
+    return result
+
+
+def _deepseek_by_key_rows(payload: Any) -> list[dict[str, Any]]:
+    """Best-effort parser for the private by_api_key usage payload."""
+    found: list[dict[str, Any]] = []
+
+    def walk(value: Any) -> None:
+        if isinstance(value, list):
+            for item in value:
+                walk(item)
+            return
+        if not isinstance(value, dict):
+            return
+        usage = value.get("usage") or value.get("usages")
+        identity = (
+            value.get("api_key_name")
+            or value.get("apiKeyName")
+            or value.get("key_name")
+            or value.get("token_name")
+            or value.get("api_key_id")
+            or value.get("apiKeyId")
+        )
+        if identity and isinstance(usage, list):
+            found.append(value)
+            return
+        for key in ("series", "keys", "api_keys", "items", "data", "biz_data", "total"):
+            if key in value:
+                walk(value[key])
+
+    walk(payload)
+    return found
+
+
+def _deepseek_keys_from_payload(payload: Any) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for block in _deepseek_by_key_rows(payload):
+        name = str(
+            block.get("api_key_name")
+            or block.get("apiKeyName")
+            or block.get("key_name")
+            or block.get("token_name")
+            or block.get("api_key_id")
+            or block.get("apiKeyId")
+            or "未命名 Key"
+        )
+        if name.startswith("sk-"):
+            name = f"{name[:5]}…{name[-4:]}"
+        tokens = 0
+        requests = 0
+        for item in block.get("usage") or []:
+            if not isinstance(item, dict):
+                continue
+            amount = int(_number(item.get("amount")))
+            if str(item.get("type") or "").upper() == "REQUEST":
+                requests += amount
+            else:
+                tokens += amount
+        result.append(
+            {
+                "name": name,
+                "status": "启用",
+                "today_tokens": 0,
+                "period_tokens": tokens,
+                "requests": requests,
+            }
+        )
+    return result
 
 
 async def _fetch_deepseek(account: dict[str, Any]) -> dict[str, Any]:
@@ -290,6 +460,8 @@ async def _fetch_deepseek(account: dict[str, Any]) -> dict[str, Any]:
             balance_payload = {}
         usage_payload = None
         usage_error = ""
+        keys: list[dict[str, Any]] = []
+        keys_note = ""
         if platform_token or _cookie_header(account):
             try:
                 now = datetime.now()
@@ -311,9 +483,24 @@ async def _fetch_deepseek(account: dict[str, Any]) -> dict[str, Any]:
                     else "CNY"
                 )
                 usage_payload = {**amount, "currency": currency}
+                end = int(time.time())
+                start = end - 30 * 86400
+                tz = int((datetime.now().astimezone().utcoffset() or timedelta()).total_seconds())
+                by_key = await _get_json(
+                    client,
+                    "https://platform.deepseek.com/api/v0/usage/by_api_key/amount"
+                    f"?start={start}&end={end}&tz={tz}",
+                    headers,
+                )
+                keys = _deepseek_keys_from_payload(by_key)
+                if not keys:
+                    keys_note = "平台未返回可识别的 API Key 明细。"
             except Exception as exc:
                 usage_error = str(exc)[:240]
+                keys_note = "按 API Key 明细读取失败。"
     result = _normalize_deepseek(account, balance_payload, usage_payload)
+    result["keys"] = keys
+    result["keys_note"] = keys_note
     if usage_error:
         result["note"] = f"余额已读取；详细用量读取失败：{usage_error}"
     return result

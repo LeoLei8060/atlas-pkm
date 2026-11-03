@@ -577,3 +577,11 @@ textarea.input { width: 100%; resize: vertical; min-height: 92px; line-height: 1
 .usage-account-row { display: flex; gap: 8px; align-items: center; justify-content: space-between; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
 .usage-account-row small { color: var(--muted); display: block; }
 .usage-note { color: var(--muted); font-size: 11px; margin-top: 6px; }
+
+.usage-keys { margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 8px; }
+.usage-keys summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+.usage-table-wrap { overflow-x: auto; margin-top: 8px; }
+.usage-key-table { width: 100%; border-collapse: collapse; font-size: 11px; white-space: nowrap; }
+.usage-key-table th, .usage-key-table td { text-align: right; padding: 5px 6px; border-bottom: 1px solid var(--line); }
+.usage-key-table th:first-child, .usage-key-table td:first-child { text-align: left; max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+.usage-key-table th { color: var(--muted); font-weight: 500; }

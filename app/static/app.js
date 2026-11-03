@@ -939,6 +939,24 @@ function renderUsage() {
       const period = item.period || {};
       const models = (item.models || []).slice(0, 6)
         .map(model => `<div class="usage-stat"><span>${esc(model.model)}</span><strong>${fmtCount(model.tokens)}</strong></div>`).join('');
+      const keys = item.keys || [];
+      const keyRows = keys.map(key => `<tr>
+        <td>${esc(key.name)}</td>
+        <td>${esc(key.status || '')}</td>
+        <td>${fmtCount(key.today_tokens || 0)}</td>
+        <td>${fmtCount(key.period_tokens || 0)}</td>
+        <td>${fmtCount(key.requests || 0)}</td>
+        <td>${key.used !== undefined ? usageMoney(key.used, balance.currency || '¥') : '—'}</td>
+        <td>${key.remaining === null || key.remaining === undefined ? '—' : usageMoney(key.remaining, balance.currency || '¥')}</td>
+      </tr>`).join('');
+      const keyBlock = keys.length ? `<details class="usage-keys">
+        <summary>API Keys（${keys.length}）</summary>
+        <div class="usage-table-wrap"><table class="usage-key-table">
+          <thead><tr><th>Key</th><th>状态</th><th>今日</th><th>30 天</th><th>请求</th><th>累计已用</th><th>剩余</th></tr></thead>
+          <tbody>${keyRows}</tbody>
+        </table></div>
+        ${item.keys_note ? `<div class="usage-note">${esc(item.keys_note)}</div>` : ''}
+      </details>` : (item.keys_note ? `<div class="usage-note">${esc(item.keys_note)}</div>` : '');
       return `<div class="usage-card">
         <h4>${esc(item.name)}</h4>
         <div class="usage-stat"><span>余额</span><strong>${usageMoney(balance.remaining, balance.currency || '¥')}</strong></div>
@@ -947,6 +965,7 @@ function renderUsage() {
         <div class="usage-stat"><span>今日请求</span><strong>${fmtCount(today.requests || 0)}</strong></div>
         <div class="usage-stat"><span>近 30 天 Token</span><strong>${fmtCount(period.tokens || 0)}</strong></div>
         ${models ? `<div class="usage-note">按模型</div>${models}` : ''}
+        ${keyBlock}
         ${item.note ? `<div class="usage-note">${esc(item.note)}</div>` : ''}
       </div>`;
     }).join('');
