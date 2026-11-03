@@ -995,6 +995,14 @@ function renderUsage() {
       const models = (item.models || []).slice(0, 6)
         .map(model => `<div class="usage-stat"><span>${esc(model.model)}</span><strong>${fmtCount(model.tokens)}</strong></div>`).join('');
       const keyBlock = renderUsageKeyBlock(item);
+      const daily = item.daily || [];
+      const dailyBlock = daily.length ? `<details class="usage-keys">
+        <summary>每日用量（${daily.length} 天）</summary>
+        <div class="usage-table-wrap"><table class="usage-key-table">
+          <thead><tr><th>日期</th><th>Token</th><th>请求</th></tr></thead>
+          <tbody>${daily.map(day => `<tr><td>${esc(day.date)}</td><td>${fmtCount(day.tokens || 0)}</td><td>${fmtCount(day.requests || 0)}</td></tr>`).join('')}</tbody>
+        </table></div>
+      </details>` : '';
       return `<div class="usage-card">
         <h4>${esc(item.name)}</h4>
         <div class="usage-note">账号总计（所有 API Key）</div>
@@ -1005,6 +1013,7 @@ function renderUsage() {
         <div class="usage-stat"><span>${esc(period.label || `近 ${period.days || 30} 天`)} Token</span><strong>${fmtCount(period.tokens || 0)}</strong></div>
         ${period.prompt_tokens || period.completion_tokens ? `<div class="usage-note">输入 ${fmtCount(period.prompt_tokens || 0)} · 输出 ${fmtCount(period.completion_tokens || 0)}${period.cached_tokens ? ` · 缓存命中 ${fmtCount(period.cached_tokens)}` : ''}</div>` : ''}
         ${models ? `<div class="usage-note">按模型</div>${models}` : ''}
+        ${dailyBlock}
         ${keyBlock}
         ${item.note ? `<div class="usage-note">${esc(item.note)}</div>` : ''}
       </div>`;

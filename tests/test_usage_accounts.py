@@ -64,9 +64,9 @@ def test_newapi_usage_normalization():
 
 
 def test_deepseek_by_api_key_series_parser():
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    today = datetime.now(timezone.utc).date().isoformat()
+    today = datetime.now().date().isoformat()
     balance = {
         "is_available": True,
         "balance_infos": [
@@ -105,6 +105,18 @@ def test_deepseek_by_api_key_series_parser():
     assert result["today"]["requests"] == 2
     assert result["period"]["cached_tokens"] == 10
     assert result["models"][0]["model"] == "deepseek-chat"
+
+
+def test_deepseek_platform_summary_balance():
+    result = _normalize_deepseek(
+        {"name": "deepseek"},
+        {},
+        None,
+        {"data": {"biz_data": {"normal_wallets": [{"currency": "CNY", "balance": "100.5"}], "bonus_wallets": [{"currency": "CNY", "balance": "1.5"}]}}},
+    )
+    assert result["balance"]["remaining"] == 102
+    assert result["balance"]["topped_up"] == 100.5
+    assert result["balance"]["granted"] == 1.5
 
 
 def test_deepseek_by_key_usage_parser():

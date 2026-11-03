@@ -19,6 +19,7 @@ _key_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 _key_cooldown: dict[str, float] = {}
 
 DEEPSEEK_BALANCE = "https://api.deepseek.com/user/balance"
+DEEPSEEK_SUMMARY = "https://platform.deepseek.com/api/v0/users/get_user_summary"
 DEEPSEEK_USAGE = "https://platform.deepseek.com/api/v0/usage/{kind}"
 DEEPSEEK_SUMMARY = "https://platform.deepseek.com/api/v0/users/get_user_summary"
 
@@ -272,15 +273,33 @@ def _normalize_deepseek(
     account: dict[str, Any],
     balance_payload: dict[str, Any],
     usage_payload: dict[str, Any] | None,
+    summary_payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     infos = balance_payload.get("balance_infos") or []
     info = next((item for item in infos if str(item.get("currency")) == "CNY"), None) or (infos[0] if infos else {})
     currency = str(info.get("currency") or "CNY")
+    remaining = _number(info.get("total_balance"))
+    granted = _number(info.get("granted_balance"))
+    topped_up = _number(info.get("topped_up_balance"))
+    summary = _unwrap_payload(summary_payload or {})
+    if isinstance(summary, dict):
+        normal_wallets = summary.get("normal_wallets") or []
+        bonus_wallets = summary.get("bonus_wallets") or []
+        normal = sum(_number(item.get("balance")) for item in normal_wallets if isinstance(item, dict))
+        bonus = sum(_number(item.get("balance")) for item in bonus_wallets if isinstance(item, dict))
+        if not infos and (normal or bonus):
+            remaining = normal + bonus
+            granted = bonus
+            topped_up = normal
+        for wallet in normal_wallets + bonus_wallets:
+            if isinstance(wallet, dict) and wallet.get("currency"):
+                currency = str(wallet.get("currency"))
+                break
     result: dict[str, Any] = {
         "balance": {
-            "remaining": _number(info.get("total_balance")),
-            "granted": _number(info.get("granted_balance")),
-            "topped_up": _number(info.get("topped_up_balance")),
+            "remaining": remaining,
+            "granted": granted,
+            "topped_up": topped_up,
             "currency": "¥" if currency == "CNY" else "$",
         },
         "today": {
@@ -289,7 +308,7 @@ def _normalize_deepseek(
             "prompt_tokens": 0,
             "completion_tokens": 0,
             "cached_tokens": 0,
-            "label": "今日（UTC）",
+            "label": "今日",
         },
         "period": {
             "days": 30,
@@ -298,7 +317,7 @@ def _normalize_deepseek(
             "prompt_tokens": 0,
             "completion_tokens": 0,
             "cached_tokens": 0,
-            "label": "近 30 天",
+            "label": "本月",
         },
         "models": [],
         "daily": [],
@@ -308,14 +327,23 @@ def _normalize_deepseek(
         result["note"] = "DeepSeek API Key 只能查询余额；详细 Token 需要填写 Platform userToken。"
         return result
     rows, totals, _ = _deepseek_usage_rows(usage_payload)
-    today = datetime.now(timezone.utc).date().isoformat()
+    today = datetime.now().date().isoformat()
     models: dict[str, dict[str, Any]] = {}
     daily: dict[str, dict[str, Any]] = {}
     for row in rows:
-        model = models.setdefault(row["model"], {"model": row["model"], "tokens": 0, "requests": 0})
+        model = models.setdefault(
+            row["model"],
+            {"model": row["model"], "tokens": 0, "requests": 0, "prompt_tokens": 0, "completion_tokens": 0, "cached_tokens": 0},
+        )
+        day = daily.setdefault(
+            row["date"],
+            {"date": row["date"], "tokens": 0, "requests": 0, "prompt_tokens": 0, "completion_tokens": 0, "cached_tokens": 0},
+        )
+        for metric in ("prompt_tokens", "completion_tokens", "cached_tokens"):
+            model[metric] += row.get(metric, 0)
+            day[metric] += row.get(metric, 0)
         model["tokens"] += row["tokens"]
         model["requests"] += row["requests"]
-        day = daily.setdefault(row["date"], {"date": row["date"], "tokens": 0, "requests": 0})
         day["tokens"] += row["tokens"]
         day["requests"] += row["requests"]
         for metric in ("prompt_tokens", "completion_tokens", "cached_tokens"):
@@ -545,22 +573,25 @@ async def _fetch_deepseek(account: dict[str, Any]) -> dict[str, Any]:
         else:
             balance_payload = {}
         usage_payload = None
+        summary_payload = {}
         usage_error = ""
         if platform_token or _cookie_header(account):
             try:
-                end = int(time.time())
-                start = end - 30 * 86400
+                headers = _headers(account)
+                summary_payload = await _get_json(client, DEEPSEEK_SUMMARY, headers)
+            except Exception:
+                summary_payload = {}
+            try:
+                now = datetime.now()
                 headers = _headers(account)
                 amount = await _get_json(
                     client,
-                    "https://platform.deepseek.com/api/v0/usage/by_api_key/amount"
-                    f"?start={start}&end={end}&tz=0",
+                    f"{DEEPSEEK_USAGE.format(kind='amount')}?month={now.month}&year={now.year}",
                     headers,
                 )
                 cost = await _get_json(
                     client,
-                    "https://platform.deepseek.com/api/v0/usage/by_api_key/cost"
-                    f"?start={start}&end={end}&tz=0",
+                    f"{DEEPSEEK_USAGE.format(kind='cost')}?month={now.month}&year={now.year}",
                     headers,
                 )
                 cost_body = _unwrap_payload(cost)
@@ -573,7 +604,7 @@ async def _fetch_deepseek(account: dict[str, Any]) -> dict[str, Any]:
                 usage_payload = {**amount, "currency": currency}
             except Exception as exc:
                 usage_error = str(exc)[:240]
-    result = _normalize_deepseek(account, balance_payload, usage_payload)
+    result = _normalize_deepseek(account, balance_payload, usage_payload, summary_payload)
     if usage_error:
         result["note"] = f"余额已读取；详细用量读取失败：{usage_error}"
     return result
