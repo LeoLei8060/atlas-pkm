@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 
 from fastapi.testclient import TestClient
@@ -73,26 +74,30 @@ def test_deepseek_by_api_key_series_parser():
         ],
     }
     usage = {
+        "code": 0,
         "data": {
-            "biz_data": {
-                "series": [
-                    {
-                        "model": "deepseek-chat",
-                        "buckets": [
-                            {
-                                "time": f"{today}T00:00:00Z",
-                                "usage": [
-                                    {"type": "PROMPT_CACHE_HIT_TOKEN", "amount": "10"},
-                                    {"type": "PROMPT_CACHE_MISS_TOKEN", "amount": "20"},
-                                    {"type": "RESPONSE_TOKEN", "amount": "5"},
-                                    {"type": "REQUEST", "amount": "2"},
-                                ],
-                            }
-                        ],
-                    }
-                ]
-            }
-        }
+            "biz_code": 0,
+            "biz_data": json.dumps(
+                {
+                    "series": [
+                        {
+                            "model": "deepseek-chat",
+                            "buckets": [
+                                {
+                                    "time": f"{today}T00:00:00Z",
+                                    "usage": [
+                                        {"type": "PROMPT_CACHE_HIT_TOKEN", "amount": "10"},
+                                        {"type": "PROMPT_CACHE_MISS_TOKEN", "amount": "20"},
+                                        {"type": "RESPONSE_TOKEN", "amount": "5"},
+                                        {"type": "REQUEST", "amount": "2"},
+                                    ],
+                                }
+                            ],
+                        }
+                    ]
+                }
+            ),
+        },
     }
     result = _normalize_deepseek({"name": "deepseek"}, balance, usage)
     assert result["period"]["tokens"] == 35

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import time
 from datetime import datetime, timedelta, timezone
@@ -73,6 +74,40 @@ def _headers(account: dict[str, Any]) -> dict[str, str]:
     if cookies:
         headers["Cookie"] = cookies
     return headers
+
+
+def _maybe_json(value: Any) -> Any:
+    if not isinstance(value, str):
+        return value
+    text = value.strip()
+    if not text or text[0] not in "[{":
+        return value
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return value
+
+
+def _unwrap_payload(value: Any) -> Any:
+    """DeepSeek often returns JSON encoded inside data/biz_data strings."""
+    current = _maybe_json(value)
+    seen: set[int] = set()
+    for _ in range(8):
+        current = _maybe_json(current)
+        if not isinstance(current, (dict, list)):
+            return current
+        if id(current) in seen:
+            return current
+        seen.add(id(current))
+        if isinstance(current, list):
+            return current
+        for key in ("biz_data", "bizData", "data", "result", "payload"):
+            if key in current:
+                current = current[key]
+                break
+        else:
+            return current
+    return current
 
 
 def _number(value: Any) -> float:
@@ -198,8 +233,7 @@ def _bucket_date(value: Any) -> str:
 
 
 def _deepseek_usage_rows(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]], str]:
-    data = payload.get("data") or {}
-    biz = data.get("biz_data") or {}
+    biz = _unwrap_payload(payload)
     rows: list[dict[str, Any]] = []
     series = biz.get("series") if isinstance(biz, dict) else None
     if isinstance(series, list):
@@ -434,6 +468,7 @@ async def _fetch_newapi(account: dict[str, Any]) -> dict[str, Any]:
 def _deepseek_by_key_rows(payload: Any) -> list[dict[str, Any]]:
     """Best-effort parser for the private by_api_key usage payload."""
     found: list[dict[str, Any]] = []
+    payload = _unwrap_payload(payload)
 
     def walk(value: Any) -> None:
         if isinstance(value, list):
@@ -528,7 +563,8 @@ async def _fetch_deepseek(account: dict[str, Any]) -> dict[str, Any]:
                     f"?start={start}&end={end}&tz=0",
                     headers,
                 )
-                biz_cost = (cost.get("data") or {}).get("biz_data")
+                cost_body = _unwrap_payload(cost)
+                biz_cost = cost_body.get("biz_data") if isinstance(cost_body, dict) else cost_body
                 currency = (
                     biz_cost[0].get("currency")
                     if isinstance(biz_cost, list) and biz_cost
