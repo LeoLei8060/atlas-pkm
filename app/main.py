@@ -69,6 +69,7 @@ from .services.usage_accounts import (
     add_account as add_usage_account,
     delete_account as delete_usage_account,
     fetch_all as fetch_usage_accounts,
+    fetch_keys as fetch_usage_keys,
     list_accounts as list_usage_accounts,
 )
 from .services.notes import save_feed_as_source
@@ -579,6 +580,15 @@ def create_app() -> FastAPI:
     @app.get("/api/usage/overview")
     async def usage_overview(force: bool = False):
         return {"items": await fetch_usage_accounts(force=force)}
+
+    @app.get("/api/usage/accounts/{account_id}/keys")
+    async def usage_keys(account_id: str, force: bool = False):
+        try:
+            result = await fetch_usage_keys(account_id, force=force)
+            result["account_id"] = account_id
+            return result
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from exc
 
     @app.get("/api/feed")
     async def feed(

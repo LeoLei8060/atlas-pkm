@@ -171,13 +171,14 @@ _system
   - `Access Token + 用户 ID` 读取账户级用量
   - 剩余/累计额度
   - 今日 Token 和请求数
-  - 近 30 天 Token
+  - 近 30 天 Token（DeepSeek 为“本月”）
   - 按模型统计
-  - 按 API Key 展开：Key 名称、状态、今日/30 天 Token、请求数、累计已用、剩余额度
+  - 按 API Key 展开：Key 名称、状态、今日/区间 Token、请求数、累计已用、剩余额度
+- 按 API Key 明细采用**展开时懒加载**，账号级刷新不会翻日志，避免触发 New API 429。
 - DeepSeek 使用 Platform `userToken` 查询按 API Key 用量；API Key 仍只用于余额。
 - 按 Key 明细读取失败不会影响账号级用量显示，会单独提示。
 - 用量账户令牌使用 Windows DPAPI 加密保存，API 响应只返回是否已配置。
-- 外部用量结果缓存 5 分钟，避免频繁请求平台。
+- 外部用量结果缓存 5 分钟；按 Key 遇到 429 会暂停 60 秒，避免继续放大限流。
 
 > 绑定方式：New API 使用平台个人资料中的 **Access Token + 数字用户 ID**；DeepSeek 使用 **API Key**（余额）和可选的 **Platform userToken**（详细 Token）。
 
@@ -843,6 +844,7 @@ pkm-app/
 ## License
 
 当前仓库尚未包含 `LICENSE` 文件。正式开源发布前需要选择并添加许可证；在添加之前，不应默认视为 MIT 或其他开源许可。
+
 
 
 

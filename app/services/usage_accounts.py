@@ -14,6 +14,8 @@ from .secret_store import protect, protect_json, unprotect, unprotect_json
 
 CACHE_TTL = 300
 _cache: dict[str, tuple[float, dict[str, Any]]] = {}
+_key_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+_key_cooldown: dict[str, float] = {}
 
 DEEPSEEK_BALANCE = "https://api.deepseek.com/user/balance"
 DEEPSEEK_USAGE = "https://platform.deepseek.com/api/v0/usage/{kind}"
@@ -152,6 +154,7 @@ def _normalize_newapi(
         },
         "period": {
             "days": 30,
+            "label": "近 30 天",
             "tokens": period_tokens,
             "requests": period_requests,
         },
@@ -177,16 +180,37 @@ def _deepseek_usage_rows(payload: dict[str, Any]) -> tuple[list[dict[str, Any]],
             name = str(model.get("model") or "未知模型")
             tokens = 0
             requests = 0
+            prompt_tokens = 0
+            completion_tokens = 0
+            cached_tokens = 0
             for item in model.get("usage") or []:
                 if not isinstance(item, dict):
                     continue
                 value = int(_number(item.get("amount")))
-                if str(item.get("type") or "").upper() == "REQUEST":
+                kind = str(item.get("type") or "").upper()
+                if kind == "REQUEST":
                     requests += value
                 else:
                     tokens += value
+                    if "CACHE_HIT" in kind:
+                        cached_tokens += value
+                        prompt_tokens += value
+                    elif "PROMPT" in kind:
+                        prompt_tokens += value
+                    elif "RESPONSE" in kind or "COMPLETION" in kind:
+                        completion_tokens += value
             if tokens or requests:
-                rows.append({"date": date, "model": name, "tokens": tokens, "requests": requests})
+                rows.append(
+                    {
+                        "date": date,
+                        "model": name,
+                        "tokens": tokens,
+                        "requests": requests,
+                        "prompt_tokens": prompt_tokens,
+                        "completion_tokens": completion_tokens,
+                        "cached_tokens": cached_tokens,
+                    }
+                )
     return rows, list(totals or []), str(payload.get("currency") or "CNY")
 
 
@@ -205,8 +229,16 @@ def _normalize_deepseek(
             "topped_up": _number(info.get("topped_up_balance")),
             "currency": "¥" if currency == "CNY" else "$",
         },
-        "today": {"tokens": 0, "requests": 0},
-        "period": {"days": 30, "tokens": 0, "requests": 0},
+        "today": {"tokens": 0, "requests": 0, "prompt_tokens": 0, "completion_tokens": 0, "cached_tokens": 0},
+        "period": {
+            "days": 30,
+            "tokens": 0,
+            "requests": 0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "cached_tokens": 0,
+            "label": "本月",
+        },
         "models": [],
         "daily": [],
         "note": "",
@@ -225,9 +257,13 @@ def _normalize_deepseek(
         day = daily.setdefault(row["date"], {"date": row["date"], "tokens": 0, "requests": 0})
         day["tokens"] += row["tokens"]
         day["requests"] += row["requests"]
+        for metric in ("prompt_tokens", "completion_tokens", "cached_tokens"):
+            result["period"][metric] += row.get(metric, 0)
         result["period"]["tokens"] += row["tokens"]
         result["period"]["requests"] += row["requests"]
         if row["date"] == today:
+            for metric in ("prompt_tokens", "completion_tokens", "cached_tokens"):
+                result["today"][metric] += row.get(metric, 0)
             result["today"]["tokens"] += row["tokens"]
             result["today"]["requests"] += row["requests"]
     result["models"] = sorted(models.values(), key=lambda item: item["tokens"], reverse=True)
@@ -365,19 +401,7 @@ async def _fetch_newapi(account: dict[str, Any]) -> dict[str, Any]:
             headers,
         )
         rows = _newapi_rows(data_payload.get("data"))
-        qpu = _number(status.get("quota_per_unit")) or 500000.0
-        keys: list[dict[str, Any]] = []
-        keys_note = "按 API Key 的累计额度来自令牌列表；区间 Token/请求数来自请求日志。"
-        try:
-            keys = await _fetch_newapi_keys(
-                client, base, headers, qpu, int(month_start), end_ts
-            )
-        except Exception as exc:
-            keys_note = f"账号用量正常；按 API Key 明细读取失败：{str(exc)[:180]}"
-    result = _normalize_newapi(account, status, user, today_stat, rows)
-    result["keys"] = keys
-    result["keys_note"] = keys_note
-    return result
+    return _normalize_newapi(account, status, user, today_stat, rows)
 
 
 def _deepseek_by_key_rows(payload: Any) -> list[dict[str, Any]]:
@@ -460,8 +484,6 @@ async def _fetch_deepseek(account: dict[str, Any]) -> dict[str, Any]:
             balance_payload = {}
         usage_payload = None
         usage_error = ""
-        keys: list[dict[str, Any]] = []
-        keys_note = ""
         if platform_token or _cookie_header(account):
             try:
                 now = datetime.now()
@@ -483,24 +505,9 @@ async def _fetch_deepseek(account: dict[str, Any]) -> dict[str, Any]:
                     else "CNY"
                 )
                 usage_payload = {**amount, "currency": currency}
-                end = int(time.time())
-                start = end - 30 * 86400
-                tz = int((datetime.now().astimezone().utcoffset() or timedelta()).total_seconds())
-                by_key = await _get_json(
-                    client,
-                    "https://platform.deepseek.com/api/v0/usage/by_api_key/amount"
-                    f"?start={start}&end={end}&tz={tz}",
-                    headers,
-                )
-                keys = _deepseek_keys_from_payload(by_key)
-                if not keys:
-                    keys_note = "平台未返回可识别的 API Key 明细。"
             except Exception as exc:
                 usage_error = str(exc)[:240]
-                keys_note = "按 API Key 明细读取失败。"
     result = _normalize_deepseek(account, balance_payload, usage_payload)
-    result["keys"] = keys
-    result["keys_note"] = keys_note
     if usage_error:
         result["note"] = f"余额已读取；详细用量读取失败：{usage_error}"
     return result
@@ -518,6 +525,13 @@ def mask_account(account: dict[str, Any]) -> dict[str, Any]:
         "has_platform_token": bool(account.get("platform_token")),
         "has_session_cookies": bool(account.get("session_cookies")),
     }
+
+
+def get_account(account_id: str) -> dict[str, Any] | None:
+    return next(
+        (item for item in load_config().get("usage_accounts") or [] if item.get("id") == account_id),
+        None,
+    )
 
 
 def list_accounts(masked: bool = True) -> list[dict[str, Any]]:
@@ -564,6 +578,8 @@ def add_account(payload: dict[str, Any]) -> dict[str, Any]:
     )
     config["usage_accounts"] = accounts
     save_config(config)
+    _key_cache.pop(account_id, None)
+    _key_cooldown.pop(account_id, None)
     return mask_account(account)
 
 
@@ -576,6 +592,8 @@ def delete_account(account_id: str) -> bool:
     config["usage_accounts"] = remaining
     save_config(config)
     _cache.pop(account_id, None)
+    _key_cache.pop(account_id, None)
+    _key_cooldown.pop(account_id, None)
     return True
 
 
@@ -617,3 +635,62 @@ async def fetch_all(force: bool = False) -> list[dict[str, Any]]:
     for account in accounts:
         results.append(await fetch_account(account, force=force))
     return results
+
+
+async def _fetch_newapi_keys_for_account(account: dict[str, Any]) -> list[dict[str, Any]]:
+    base = str(account.get("base_url") or "").rstrip("/")
+    if not base:
+        raise RuntimeError("缺少 Base URL")
+    end = int(time.time())
+    start = end - 30 * 86400
+    async with _client(base) as client:
+        status_payload = await _get_json(client, f"{base}/api/status")
+        status = status_payload.get("data") or {}
+        qpu = _number(status.get("quota_per_unit")) or 500000.0
+        return await _fetch_newapi_keys(client, base, _headers(account), qpu, start, end)
+
+
+async def fetch_keys(account_id: str, force: bool = False) -> dict[str, Any]:
+    account = get_account(account_id)
+    if not account:
+        raise ValueError("用量账户不存在")
+    cached = _key_cache.get(account_id)
+    if not force and cached and time.time() - cached[0] < CACHE_TTL:
+        return cached[1]
+    cooldown = _key_cooldown.get(account_id, 0)
+    if cooldown > time.time():
+        return {
+            "keys": [],
+            "note": "平台刚刚返回 429，已暂停按 API Key 请求 60 秒；账号级用量不受影响。",
+            "limited": True,
+        }
+    try:
+        if account.get("kind") == "deepseek":
+            token = unprotect(str(account.get("platform_token") or ""))
+            cookies = _cookie_header(account)
+            if not token and not cookies:
+                raise RuntimeError("DeepSeek 详细 API Key 用量需要 Platform userToken")
+            end = int(time.time())
+            start = end - 30 * 86400
+            tz = int((datetime.now().astimezone().utcoffset() or timedelta()).total_seconds())
+            async with _client("https://platform.deepseek.com") as client:
+                payload = await _get_json(
+                    client,
+                    "https://platform.deepseek.com/api/v0/usage/by_api_key/amount"
+                    f"?start={start}&end={end}&tz={tz}",
+                    _headers(account),
+                )
+            keys = _deepseek_keys_from_payload(payload)
+            note = "" if keys else "平台未返回可识别的 API Key 明细。"
+        else:
+            keys = await _fetch_newapi_keys_for_account(account)
+            note = "累计额度来自令牌列表，区间 Token/请求数来自请求日志。"
+        result = {"keys": keys, "note": note, "limited": False}
+    except Exception as exc:
+        message = str(exc)
+        if "429" in message:
+            _key_cooldown[account_id] = time.time() + 60
+            message = "平台返回 429（请求过于频繁），已暂停 60 秒；账号级用量不受影响。"
+        result = {"keys": [], "note": message[:300], "limited": "429" in message}
+    _key_cache[account_id] = (time.time(), result)
+    return result

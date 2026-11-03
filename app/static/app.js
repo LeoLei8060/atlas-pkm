@@ -7,6 +7,7 @@ const state = {
   patches: [],
   usageAccounts: [],
   usageData: [],
+  usageKeys: {},
   usageLoading: false,
   sources: [],
   sourceCatalog: [],
@@ -923,10 +924,64 @@ function usageMoney(value, currency = '¥') {
   return `${currency}${Number(value).toFixed(2)}`;
 }
 
+function renderUsageKeyBlock(item) {
+  const data = state.usageKeys[item.id];
+  if (!data) {
+    return `<details class="usage-keys" data-usage-keys="${esc(item.id)}">
+      <summary>API Keys</summary><div class="usage-key-body hint">展开后加载，避免刷新全部账户时触发平台限流。</div>
+    </details>`;
+  }
+  if (data.loading) {
+    return `<details class="usage-keys" data-usage-keys="${esc(item.id)}" open>
+      <summary>API Keys</summary><div class="usage-key-body hint">正在读取 API Key 明细…</div>
+    </details>`;
+  }
+  const keys = data.keys || [];
+  if (!keys.length) {
+    return `<details class="usage-keys" data-usage-keys="${esc(item.id)}" open>
+      <summary>API Keys</summary><div class="usage-key-body usage-note">${esc(data.note || '没有 Key 明细')}</div>
+    </details>`;
+  }
+  const currency = item.balance?.currency || '¥';
+  const rows = keys.map(key => `<tr>
+    <td>${esc(key.name)}</td>
+    <td>${esc(key.status || '')}</td>
+    <td>${fmtCount(key.today_tokens || 0)}</td>
+    <td>${fmtCount(key.period_tokens || 0)}</td>
+    <td>${fmtCount(key.requests || 0)}</td>
+    <td>${key.used !== undefined ? usageMoney(key.used, currency) : '—'}</td>
+    <td>${key.remaining === null || key.remaining === undefined ? '—' : usageMoney(key.remaining, currency)}</td>
+  </tr>`).join('');
+  return `<details class="usage-keys" data-usage-keys="${esc(item.id)}" open>
+    <summary>API Keys（${keys.length}）</summary>
+    <div class="usage-key-body">
+      <div class="usage-table-wrap"><table class="usage-key-table">
+        <thead><tr><th>Key</th><th>状态</th><th>今日</th><th>30 天</th><th>请求</th><th>累计已用</th><th>剩余</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+      ${data.note ? `<div class="usage-note">${esc(data.note)}</div>` : ''}
+    </div>
+  </details>`;
+}
+
+async function loadUsageKeys(accountId) {
+  if (state.usageKeys[accountId]?.loading) return;
+  state.usageKeys[accountId] = { loading: true };
+  renderUsage();
+  try {
+    const data = await api(`/api/usage/accounts/${encodeURIComponent(accountId)}/keys`);
+    state.usageKeys[accountId] = data;
+  } catch (error) {
+    state.usageKeys[accountId] = { keys: [], note: error.message };
+  }
+  renderUsage();
+}
+
 function renderUsage() {
   const summary = $('#usageSummary');
   const accounts = $('#usageAccounts');
   if (!summary || !accounts) return;
+  const keysFor = item => state.usageKeys[item.id];
   if (!state.usageAccounts.length) {
     summary.innerHTML = emptyState('还没有用量账户', '添加 DeepSeek、米醋或 CCTQ 账户后，这里会显示 Token 消耗和余额。');
   } else {
@@ -939,31 +994,16 @@ function renderUsage() {
       const period = item.period || {};
       const models = (item.models || []).slice(0, 6)
         .map(model => `<div class="usage-stat"><span>${esc(model.model)}</span><strong>${fmtCount(model.tokens)}</strong></div>`).join('');
-      const keys = item.keys || [];
-      const keyRows = keys.map(key => `<tr>
-        <td>${esc(key.name)}</td>
-        <td>${esc(key.status || '')}</td>
-        <td>${fmtCount(key.today_tokens || 0)}</td>
-        <td>${fmtCount(key.period_tokens || 0)}</td>
-        <td>${fmtCount(key.requests || 0)}</td>
-        <td>${key.used !== undefined ? usageMoney(key.used, balance.currency || '¥') : '—'}</td>
-        <td>${key.remaining === null || key.remaining === undefined ? '—' : usageMoney(key.remaining, balance.currency || '¥')}</td>
-      </tr>`).join('');
-      const keyBlock = keys.length ? `<details class="usage-keys">
-        <summary>API Keys（${keys.length}）</summary>
-        <div class="usage-table-wrap"><table class="usage-key-table">
-          <thead><tr><th>Key</th><th>状态</th><th>今日</th><th>30 天</th><th>请求</th><th>累计已用</th><th>剩余</th></tr></thead>
-          <tbody>${keyRows}</tbody>
-        </table></div>
-        ${item.keys_note ? `<div class="usage-note">${esc(item.keys_note)}</div>` : ''}
-      </details>` : (item.keys_note ? `<div class="usage-note">${esc(item.keys_note)}</div>` : '');
+      const keyBlock = renderUsageKeyBlock(item);
       return `<div class="usage-card">
         <h4>${esc(item.name)}</h4>
+        <div class="usage-note">账号总计（所有 API Key）</div>
         <div class="usage-stat"><span>余额</span><strong>${usageMoney(balance.remaining, balance.currency || '¥')}</strong></div>
         ${balance.used !== undefined ? `<div class="usage-stat"><span>累计已用</span><strong>${usageMoney(balance.used, balance.currency || '¥')}</strong></div>` : ''}
         <div class="usage-stat"><span>今日 Token</span><strong>${fmtCount(today.tokens || 0)}</strong></div>
         <div class="usage-stat"><span>今日请求</span><strong>${fmtCount(today.requests || 0)}</strong></div>
-        <div class="usage-stat"><span>近 30 天 Token</span><strong>${fmtCount(period.tokens || 0)}</strong></div>
+        <div class="usage-stat"><span>${esc(period.label || `近 ${period.days || 30} 天`)} Token</span><strong>${fmtCount(period.tokens || 0)}</strong></div>
+        ${period.prompt_tokens || period.completion_tokens ? `<div class="usage-note">输入 ${fmtCount(period.prompt_tokens || 0)} · 输出 ${fmtCount(period.completion_tokens || 0)}${period.cached_tokens ? ` · 缓存命中 ${fmtCount(period.cached_tokens)}` : ''}</div>` : ''}
         ${models ? `<div class="usage-note">按模型</div>${models}` : ''}
         ${keyBlock}
         ${item.note ? `<div class="usage-note">${esc(item.note)}</div>` : ''}
@@ -1027,6 +1067,7 @@ async function addUsageAccount() {
 async function deleteUsageAccount(accountId) {
   if (!confirm('删除该用量账户？')) return;
   try {
+    delete state.usageKeys[accountId];
     await api(`/api/usage/accounts/${accountId}`, { method: 'DELETE' });
     await loadUsage(true);
   } catch (error) {
@@ -2606,6 +2647,15 @@ function bindEvents() {
     const deepseek = $('#usageKind').value === 'deepseek';
     $('#usageNewapiFields').classList.toggle('hidden', deepseek);
     $('#usageDeepseekFields').classList.toggle('hidden', !deepseek);
+  });
+  $('#usageSummary').addEventListener('click', event => {
+    const summary = event.target.closest('summary');
+    const details = summary?.closest('[data-usage-keys]');
+    if (!details) return;
+    const accountId = details.dataset.usageKeys;
+    const cached = state.usageKeys[accountId];
+    if (cached && !cached.loading && cached.keys?.length) return;
+    loadUsageKeys(accountId);
   });
   $('#usageAccounts').addEventListener('click', event => {
     const button = event.target.closest('[data-delete-usage]');
