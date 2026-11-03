@@ -162,8 +162,16 @@
             </div>
           </div>
           <div id="usageDeepseekFields" class="hidden">
-            <label class="field"><span>API Key</span><input id="usageApiKey" class="input" type="password" placeholder="用于查询余额"></label>
-            <label class="field"><span>Platform userToken（可选）</span><input id="usagePlatformToken" class="input" type="password" placeholder="用于读取详细 Token 用量"></label>
+            <label class="field">
+              <span>API Key</span>
+              <input id="usageApiKey" class="input" type="password" placeholder="用于查询余额">
+              <span class="hint">API Key 只能查询余额，不能读取详细 Token 用量。</span>
+            </label>
+            <label class="field">
+              <span>Platform userToken（可选）</span>
+              <input id="usagePlatformToken" class="input" type="password" placeholder="用于读取详细 Token 用量">
+              <span class="hint">登录 platform.deepseek.com 后，在浏览器开发者工具 → Application → Local Storage 中读取 userToken。</span>
+            </label>
           </div>
           <div class="form-row">
             <button id="addUsageAccount" class="btn primary">绑定</button>
@@ -590,6 +598,7 @@
 <script src="/static/app.js?v=20261029-feed-replace"></script>
 </body>
 </html>
+
 
 
 
