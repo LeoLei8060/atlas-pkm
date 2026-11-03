@@ -229,9 +229,11 @@ def masked_config(config: dict[str, Any]) -> dict[str, Any]:
         item["has_access_token"] = bool(item.get("access_token"))
         item["has_api_key"] = bool(item.get("api_key"))
         item["has_platform_token"] = bool(item.get("platform_token"))
+        item["has_session_cookies"] = bool(item.get("session_cookies"))
         item["access_token"] = ""
         item["api_key"] = ""
         item["platform_token"] = ""
+        item["session_cookies"] = ""
         accounts.append(item)
     result["usage_accounts"] = accounts
     result["ready"] = ready

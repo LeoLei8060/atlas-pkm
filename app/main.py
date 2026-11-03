@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import asyncio
+import json
+import sys
+import tempfile
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal
@@ -229,6 +234,12 @@ class SourceCreate(BaseModel):
 
 class GitHubFavoriteRequest(BaseModel):
     item: dict[str, Any]
+
+
+class UsageLoginRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    kind: Literal["newapi", "deepseek"] = "newapi"
+    base_url: str = Field(default="", max_length=500)
 
 
 class UsageAccountCreate(BaseModel):
@@ -569,6 +580,54 @@ def create_app() -> FastAPI:
             return add_usage_account(body.model_dump())
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
+
+    @app.post("/api/usage/login")
+    async def login_usage_account(body: UsageLoginRequest):
+        if body.kind == "newapi" and not body.base_url.strip():
+            raise HTTPException(400, "New API 登录需要 Base URL")
+        output = Path(tempfile.gettempdir()) / f"atlas-usage-login-{uuid.uuid4().hex}.json"
+        login_args = [
+            "--kind", body.kind,
+            "--output", str(output),
+            "--base-url", body.base_url.strip(),
+        ]
+        if getattr(sys, "frozen", False):
+            command = [sys.executable, "--usage-login", *login_args]
+        else:
+            command = [sys.executable, "-m", "app.usage_login", *login_args]
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *command,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            try:
+                await asyncio.wait_for(process.wait(), timeout=300)
+            except asyncio.TimeoutError as exc:
+                process.kill()
+                raise HTTPException(408, "登录窗口超时，请重新绑定") from exc
+            try:
+                result = json.loads(output.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                raise HTTPException(502, "登录窗口没有返回有效结果") from exc
+            if not result.get("ok"):
+                raise HTTPException(400, str(result.get("error") or "登录绑定失败"))
+            payload = {
+                "name": body.name,
+                "kind": body.kind,
+                "base_url": body.base_url.strip(),
+                "user_id": result.get("user_id", ""),
+                "access_token": result.get("access_token", ""),
+                "platform_token": result.get("platform_token", ""),
+                "session_cookies": result.get("session_cookies") or [],
+            }
+            if body.kind == "newapi" and not payload["access_token"] and not payload["session_cookies"]:
+                raise HTTPException(400, "没有读取到米醋/CCTQ 登录凭据，请重新登录")
+            if body.kind == "deepseek" and not payload["platform_token"] and not payload["session_cookies"]:
+                raise HTTPException(400, "没有读取到 DeepSeek 登录凭据，请确认已登录")
+            return add_usage_account(payload)
+        finally:
+            output.unlink(missing_ok=True)
 
     @app.delete("/api/usage/accounts/{account_id}")
     async def remove_usage_account(account_id: str):

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import re
 import time
 from datetime import datetime, timedelta
@@ -9,6 +10,7 @@ import httpx
 
 from ..config import load_config, save_config
 from ..providers.base import BaseProvider
+from .secret_store import protect, protect_json, unprotect, unprotect_json
 
 CACHE_TTL = 300
 _cache: dict[str, tuple[float, dict[str, Any]]] = {}
@@ -20,7 +22,9 @@ DEEPSEEK_SUMMARY = "https://platform.deepseek.com/api/v0/users/get_user_summary"
 
 def _account_id(name: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
-    return slug or f"account-{int(time.time())}"
+    if slug:
+        return slug
+    return "account-" + hashlib.sha1(name.encode("utf-8")).hexdigest()[:10]
 
 
 def _client(base_url: str) -> httpx.AsyncClient:
@@ -32,18 +36,41 @@ def _client(base_url: str) -> httpx.AsyncClient:
     )
 
 
+def _cookie_header(account: dict[str, Any]) -> str:
+    cookies = unprotect_json(str(account.get("session_cookies") or ""), [])
+    if not isinstance(cookies, list):
+        return ""
+    return "; ".join(
+        f"{item.get('name')}={item.get('value')}"
+        for item in cookies
+        if isinstance(item, dict) and item.get("name")
+    )
+
+
 def _headers(account: dict[str, Any]) -> dict[str, str]:
     if account.get("kind") == "newapi":
-        return {
-            "Authorization": str(account.get("access_token") or ""),
+        headers = {
+            "Authorization": unprotect(str(account.get("access_token") or "")),
             "New-Api-User": str(account.get("user_id") or ""),
             "Accept": "application/json",
         }
-    return {
-        "Authorization": f"Bearer {account.get('platform_token') or account.get('api_key') or ''}",
+        if not headers["Authorization"]:
+            cookies = _cookie_header(account)
+            if cookies:
+                headers["Cookie"] = cookies
+        return headers
+    token = unprotect(str(account.get("platform_token") or "")) or unprotect(
+        str(account.get("api_key") or "")
+    )
+    headers = {
+        "Authorization": f"Bearer {token}",
         "Accept": "application/json",
         "x-client-platform": "web",
     }
+    cookies = _cookie_header(account)
+    if cookies:
+        headers["Cookie"] = cookies
+    return headers
 
 
 def _number(value: Any) -> float:
@@ -251,8 +278,8 @@ async def _fetch_newapi(account: dict[str, Any]) -> dict[str, Any]:
 
 
 async def _fetch_deepseek(account: dict[str, Any]) -> dict[str, Any]:
-    api_key = str(account.get("api_key") or "").strip()
-    platform_token = str(account.get("platform_token") or "").strip()
+    api_key = unprotect(str(account.get("api_key") or "")).strip()
+    platform_token = unprotect(str(account.get("platform_token") or "")).strip()
     if not api_key and not platform_token:
         raise RuntimeError("缺少 DeepSeek API Key 或 Platform Token")
     async with _client("https://api.deepseek.com") as client:
@@ -263,14 +290,10 @@ async def _fetch_deepseek(account: dict[str, Any]) -> dict[str, Any]:
             balance_payload = {}
         usage_payload = None
         usage_error = ""
-        if platform_token:
+        if platform_token or _cookie_header(account):
             try:
                 now = datetime.now()
-                headers = {
-                    "Authorization": f"Bearer {platform_token}",
-                    "Accept": "application/json",
-                    "x-client-platform": "web",
-                }
+                headers = _headers(account)
                 amount = await _get_json(
                     client,
                     f"{DEEPSEEK_USAGE.format(kind='amount')}?month={now.month}&year={now.year}",
@@ -306,6 +329,7 @@ def mask_account(account: dict[str, Any]) -> dict[str, Any]:
         "has_access_token": bool(account.get("access_token")),
         "has_api_key": bool(account.get("api_key")),
         "has_platform_token": bool(account.get("platform_token")),
+        "has_session_cookies": bool(account.get("session_cookies")),
     }
 
 
@@ -328,17 +352,27 @@ def add_account(payload: dict[str, Any]) -> dict[str, Any]:
         account = {"id": account_id}
         accounts.append(account)
     previous = dict(account)
+    access_token = payload.get("access_token") or previous.get("access_token") or ""
+    api_key = payload.get("api_key") or previous.get("api_key") or ""
+    platform_token = payload.get("platform_token") or previous.get("platform_token") or ""
+    cookies = payload.get("session_cookies") or previous.get("session_cookies") or ""
+    if isinstance(cookies, list):
+        cookies = protect_json(cookies)
+    elif isinstance(cookies, str) and cookies and not cookies.startswith(("dpapi:", "plain:")):
+        cookies = protect_json(cookies)
+    base_url = str(payload.get("base_url") or "").rstrip("/")
+    if (payload.get("kind") or "newapi") == "newapi" and base_url.endswith("/v1"):
+        base_url = base_url[:-3]
     account.update(
         {
             "name": name,
             "kind": payload.get("kind") or "newapi",
-            "base_url": str(payload.get("base_url") or "").rstrip("/"),
+            "base_url": base_url,
             "user_id": str(payload.get("user_id") or ""),
-            "access_token": str(payload.get("access_token") or previous.get("access_token") or ""),
-            "api_key": str(payload.get("api_key") or previous.get("api_key") or ""),
-            "platform_token": str(
-                payload.get("platform_token") or previous.get("platform_token") or ""
-            ),
+            "access_token": protect(str(access_token)),
+            "api_key": protect(str(api_key)),
+            "platform_token": protect(str(platform_token)),
+            "session_cookies": str(cookies or ""),
         }
     )
     config["usage_accounts"] = accounts

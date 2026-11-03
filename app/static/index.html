@@ -166,8 +166,9 @@
             <label class="field"><span>Platform userToken（可选）</span><input id="usagePlatformToken" class="input" type="password" placeholder="用于读取详细 Token 用量"></label>
           </div>
           <div class="form-row">
-            <button id="addUsageAccount" class="btn primary">添加账户</button>
-            <span id="usageHint" class="hint"></span>
+            <button id="loginUsageAccount" class="btn primary">登录并绑定</button>
+            <button id="addUsageAccount" class="btn ghost">手动保存 Token</button>
+            <span id="usageHint" class="hint">登录绑定会在独立窗口打开平台官方登录页。</span>
           </div>
         </details>
       </div>
@@ -590,6 +591,7 @@
 <script src="/static/app.js?v=20261029-feed-replace"></script>
 </body>
 </html>
+
 
 
 

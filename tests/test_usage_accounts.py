@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from fastapi.testclient import TestClient
 
 from app.main import create_app
@@ -27,6 +29,10 @@ def test_usage_account_is_masked_and_deletable(isolated):
         items = client.get("/api/usage/accounts").json()["items"]
         assert items[0]["id"] == "米醋中转站" or items[0]["name"] == "米醋中转站"
         assert "secret-access-token" not in str(items)
+        config_text = (isolated / "data" / "config.json").read_text(encoding="utf-8")
+        assert "secret-access-token" not in config_text
+        if os.name == "nt":
+            assert "dpapi:" in config_text
 
         deleted = client.delete(f"/api/usage/accounts/{items[0]['id']}")
         assert deleted.status_code == 200
